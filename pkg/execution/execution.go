@@ -23,12 +23,13 @@ import (
 )
 
 type Executor struct {
-	context            Context
-	out                io.Writer
-	err                error
-	buffers            LockableBufferMap
-	escapeBuf          [48]byte
-	templateDirectives []byte_template.DirectiveDefinition
+	context          Context
+	out              io.Writer
+	err              error
+	buffers          LockableBufferMap
+	escapeBuf        [48]byte
+	byteTemplatePool sync.Pool
+	bufPool          sync.Pool
 }
 
 type LockableBufferMap struct {
@@ -41,7 +42,16 @@ func NewExecutor(templateDirectives []byte_template.DirectiveDefinition) *Execut
 		buffers: LockableBufferMap{
 			Buffers: map[uint64]*bytes.Buffer{},
 		},
-		templateDirectives: templateDirectives,
+		byteTemplatePool: sync.Pool{
+			New: func() interface{} {
+				return byte_template.New(templateDirectives...)
+			},
+		},
+		bufPool: sync.Pool{
+			New: func() interface{} {
+				return bytes.NewBuffer(make([]byte, 0, 1024))
+			},
+		},
 	}
 }
 
@@ -236,14 +246,18 @@ func (e *Executor) ResolveArgs(args []datasource.Argument, data []byte) Resolved
 		}
 	}
 
-	buf := bytes.Buffer{}
-	tmpl := byte_template.New(e.templateDirectives...)
+	buf := e.bufPool.Get().(*bytes.Buffer)
+	defer func() {
+		buf.Reset()
+		e.bufPool.Put(buf)
+	}()
 
 	for i := range resolved {
 		if !bytes.Contains(resolved[i].Value, literal.DOUBLE_LBRACE) {
 			continue
 		}
-		_, err := tmpl.Execute(&buf, resolved[i].Value, func(w io.Writer, path []byte) (n int, err error) {
+		tmpl := e.byteTemplatePool.Get().(*byte_template.Template)
+		_, err := tmpl.Execute(buf, resolved[i].Value, func(w io.Writer, path []byte) (n int, err error) {
 			path = bytes.TrimFunc(path, func(r rune) bool {
 				return r == runes.SPACE || r == runes.TAB || r == runes.LINETERMINATOR
 			})
@@ -290,6 +304,7 @@ func (e *Executor) ResolveArgs(args []datasource.Argument, data []byte) Resolved
 			_, _ = w.Write(literal.RBRACE)
 			return w.Write(literal.RBRACE)
 		})
+		e.byteTemplatePool.Put(tmpl)
 		if err == nil {
 			value := buf.Bytes()
 			resolved[i].Value = make([]byte, len(value))
