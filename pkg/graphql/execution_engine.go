@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"hash"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"sync"
 
+	"github.com/cespare/xxhash"
 	"github.com/jensneuse/abstractlogger"
 
+	"github.com/jensneuse/graphql-go-tools/pkg/astprinter"
 	"github.com/jensneuse/graphql-go-tools/pkg/execution"
 	"github.com/jensneuse/graphql-go-tools/pkg/execution/datasource"
 	"github.com/jensneuse/graphql-go-tools/pkg/operationreport"
@@ -31,18 +34,18 @@ type ExecutionOptions struct {
 }
 
 type ExecutionEngine struct {
-	logger       abstractlogger.Logger
-	basePlanner  *datasource.BasePlanner
-	executorPool *sync.Pool
-	schema       *Schema
+	logger           abstractlogger.Logger
+	basePlanner      *datasource.BasePlanner
+	executorPool     *sync.Pool
+	plannerPool      *sync.Pool
+	printerPool      *sync.Pool
+	hash64Pool       *sync.Pool
+	schema           *Schema
+	queryPlanCache   map[uint64]execution.RootNode
+	queryPlanCacheMu sync.RWMutex
 }
 
 func NewExecutionEngine(logger abstractlogger.Logger, schema *Schema, plannerConfig datasource.PlannerConfiguration) (*ExecutionEngine, error) {
-	executorPool := sync.Pool{
-		New: func() interface{} {
-			return execution.NewExecutor(nil)
-		},
-	}
 
 	basePlanner, err := datasource.NewBaseDataSourcePlanner(schema.rawInput, plannerConfig, logger)
 	if err != nil {
@@ -50,10 +53,30 @@ func NewExecutionEngine(logger abstractlogger.Logger, schema *Schema, plannerCon
 	}
 
 	return &ExecutionEngine{
-		logger:       logger,
-		basePlanner:  basePlanner,
-		executorPool: &executorPool,
-		schema:       schema,
+		logger:      logger,
+		basePlanner: basePlanner,
+		executorPool: &sync.Pool{
+			New: func() interface{} {
+				return execution.NewExecutor(nil)
+			},
+		},
+		plannerPool: &sync.Pool{
+			New: func() interface{} {
+				return execution.NewPlanner(basePlanner)
+			},
+		},
+		hash64Pool: &sync.Pool{
+			New: func() interface{} {
+				return xxhash.New()
+			},
+		},
+		printerPool: &sync.Pool{
+			New: func() interface{} {
+				return &astprinter.Printer{}
+			},
+		},
+		schema:         schema,
+		queryPlanCache: make(map[uint64]execution.RootNode, 1024),
 	}, nil
 }
 
@@ -111,10 +134,24 @@ func (e *ExecutionEngine) ExecuteWithWriter(ctx context.Context, operation *Requ
 		}
 	}
 
-	planner := execution.NewPlanner(e.basePlanner)
-	plan := planner.Plan(&operation.document, e.basePlanner.Definition, &report)
-	if report.HasErrors() {
-		return report
+	operationID, err := e.operationID(operation)
+	if err != nil {
+		return err
+	}
+
+	e.queryPlanCacheMu.RLock()
+	plan, exists := e.queryPlanCache[operationID]
+	e.queryPlanCacheMu.RUnlock()
+	if !exists {
+		planner := e.plannerPool.Get().(*execution.Planner)
+		plan = planner.Plan(&operation.document, e.basePlanner.Definition, &report)
+		e.plannerPool.Put(planner)
+		if report.HasErrors() {
+			return report
+		}
+		e.queryPlanCacheMu.Lock()
+		e.queryPlanCache[operationID] = plan
+		e.queryPlanCacheMu.Unlock()
 	}
 
 	variables, extraArguments := execution.VariablesFromJson(operation.Variables, options.ExtraArguments)
@@ -127,6 +164,17 @@ func (e *ExecutionEngine) ExecuteWithWriter(ctx context.Context, operation *Requ
 	poolExecutor := e.executorPool.Get().(*execution.Executor)
 	defer e.executorPool.Put(poolExecutor)
 	return poolExecutor.Execute(executionContext, plan, writer)
+}
+
+func (e *ExecutionEngine) operationID(operation *Request) (uint64, error) {
+	hash64 := e.hash64Pool.Get().(hash.Hash64)
+	printer := e.printerPool.Get().(*astprinter.Printer)
+	err := printer.Print(&operation.document, &e.schema.document, hash64)
+	result := hash64.Sum64()
+	hash64.Reset()
+	e.hash64Pool.Put(hash64)
+	e.printerPool.Put(printer)
+	return result, err
 }
 
 func (e *ExecutionEngine) Execute(ctx context.Context, operation *Request, options ExecutionOptions) (*ExecutionResult, error) {

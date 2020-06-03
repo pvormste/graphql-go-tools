@@ -336,9 +336,17 @@ func BenchmarkExecutionEngine(b *testing.B) {
 	assert.NoError(b, err)
 	assert.Equal(b, "{\"data\":{\"hello\":\"world\"}}", out.String())
 
+	expectedBytes := []byte("{\"data\":{\"hello\":\"world\"}}")
+
 	pool := sync.Pool{
 		New: func() interface{} {
 			return newEngine()
+		},
+	}
+
+	bufPool := sync.Pool{
+		New: func() interface{} {
+			return bytes.NewBuffer(make([]byte,0,1024))
 		},
 	}
 
@@ -349,8 +357,14 @@ func BenchmarkExecutionEngine(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			engine := pool.Get().(*ExecutionEngine)
-			_ = engine.ExecuteWithWriter(ctx, req, ioutil.Discard, ExecutionOptions{})
+			buf := bufPool.Get().(*bytes.Buffer)
+			_ = engine.ExecuteWithWriter(ctx, req, buf, ExecutionOptions{})
+			if !bytes.Equal(buf.Bytes(),expectedBytes){
+				b.Fatalf("want: %s, got: %s\n",string(expectedBytes),buf.String())
+			}
 			pool.Put(engine)
+			buf.Reset()
+			bufPool.Put(buf)
 		}
 	})
 }
