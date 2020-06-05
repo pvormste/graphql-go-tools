@@ -1,8 +1,6 @@
 package ast
 
 import (
-	"math"
-
 	"github.com/jensneuse/graphql-go-tools/internal/pkg/unsafebytes"
 	"github.com/jensneuse/graphql-go-tools/pkg/lexer/position"
 )
@@ -62,21 +60,33 @@ func (d *Document) AddVariableDefinitionToOperationDefinition(operationDefinitio
 }
 
 const (
-	alphabet = `abcdefghijklmnopqrstuvwxyz`
+	alphabet     = `abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ`
+	alphaNumeric = `abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789`
 )
 
-func (d *Document) GenerateUnusedVariableDefinitionName(operationDefinition int) []byte {
-	for i := 1;i<math.MaxInt64;i++{
-		out := make([]byte,i)
-		for j := range alphabet {
-			for k := 0;k<i;k++{
-				out[k] = alphabet[j]
+func (d *Document) generateUniqueShortIdentifier(exists func(b []byte) bool) []byte {
+	out := make([]byte, 0, 1)
+	input := alphabet
+	for i := 1; true; i++ {
+		for j := 0; j < len(input); j++ {
+			out = append(out, input[j])
+			if exists(out) {
+				out = out[:i-1]
+				continue
 			}
-			_,exists := d.VariableDefinitionByNameAndOperation(operationDefinition,out)
-			if !exists {
-				return out
-			}
+			return out
+		}
+		out = append(out, input[i-1])
+		if i == 1 {
+			input = alphaNumeric
 		}
 	}
 	return nil
+}
+
+func (d *Document) GenerateUnusedVariableDefinitionName(operationDefinition int) []byte {
+	return d.generateUniqueShortIdentifier(func(b []byte) bool {
+		_, exists := d.VariableDefinitionByNameAndOperation(operationDefinition, b)
+		return exists
+	})
 }
