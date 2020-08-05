@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
+	"gopkg.in/mgo.v2/bson"
 
 	"github.com/jensneuse/graphql-go-tools/internal/pkg/unsafeparser"
 	"github.com/jensneuse/graphql-go-tools/pkg/ast"
@@ -870,4 +871,25 @@ var httpJsonTypeFieldConfigCountry = datasource.TypeFieldConfiguration{
 	DataSource: datasource.SourceConfig{
 		Name: httpJsonDataSourceName,
 	},
+}
+
+func TestDataSourceConfig_BSONJSONEncodings(t *testing.T) {
+
+	dataSource := datasource.SourceConfig{
+		Name:   "HTTPJSONDataSource",
+		Config: []byte(`{"foo":"bar"}`),
+	}
+
+	// Encode and decode with bson
+	dataSourceInBytes, _ := bson.Marshal(dataSource)
+	var val interface{}
+	_ = bson.Unmarshal(dataSourceInBytes, &val)
+
+	// Encode and decode the value gotten by bson decode
+	endValInBytes, _ := json.Marshal(val)
+	var endVal datasource.SourceConfig
+	_ = json.Unmarshal(endValInBytes, &endVal)
+
+	assert.Equal(t, dataSource, endVal)
+
 }
