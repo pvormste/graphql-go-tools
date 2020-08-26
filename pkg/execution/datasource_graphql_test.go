@@ -233,6 +233,44 @@ func TestGraphqlDataSource_WithPlanning(t *testing.T) {
 			expectedResponseBody: `{ "data": { "country": { "code": "DE", "name": "Germany" }, "continent": { "code": "EU", "name": "Europe" } } }`,
 		}),
 	)
+
+	t.Run("should execute a single query and return the errors when no data was returned", run(
+		testCase{
+			definition: countriesSchema,
+			operation: datasource.GraphqlRequest{
+				OperationName: "",
+				Variables:     nil,
+				Query:         `{ country(code: "DE") { code name } }`,
+			},
+			typeFieldConfigs: []datasource.TypeFieldConfiguration{
+				graphqlTypeFieldConfigCountry,
+			},
+			assertRequestBody: false,
+			upstreamResponses: []string{
+				`{ "errors": [ { "message": "internal error occurred" } ] }`,
+			},
+			expectedResponseBody: `{ "errors": [ { "message": "Query.country: internal error occurred" } ], "data": null }`,
+		}),
+	)
+
+	t.Run("should execute a single query and return the data aswell as the errors", run(
+		testCase{
+			definition: countriesSchema,
+			operation: datasource.GraphqlRequest{
+				OperationName: "",
+				Variables:     nil,
+				Query:         `{ country(code: "DE") { code name } }`,
+			},
+			typeFieldConfigs: []datasource.TypeFieldConfiguration{
+				graphqlTypeFieldConfigCountry,
+			},
+			assertRequestBody: false,
+			upstreamResponses: []string{
+				`{ "errors": [ { "message": "name not found" } ], "data": { "country": { "code": "DE", "name": null } } }`,
+			},
+			expectedResponseBody: `{ "errors": [ { "message": "Query.country: name not found" } ], "data": { "country": { "code": "DE", "name": null } } }`,
+		}),
+	)
 }
 
 func upstreamGraphqlServer(t *testing.T, assertRequestBody bool, expectedRequestBody string, response string) *httptest.Server {

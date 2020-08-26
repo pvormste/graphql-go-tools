@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -18,6 +19,14 @@ import (
 	"github.com/jensneuse/graphql-go-tools/pkg/astprinter"
 	"github.com/jensneuse/graphql-go-tools/pkg/lexer/literal"
 )
+
+var ErrInvalidGraphqlResponse = errors.New("invalid GraphQL response")
+
+type GraphQLError struct {
+	Message string
+}
+
+type GraphQLErrors []GraphQLError
 
 var graphqlSchemes = []string{
 	"https",
@@ -459,13 +468,35 @@ func (g *GraphQLDataSource) Resolve(ctx context.Context, args ResolverArgs, out 
 		}
 	}()
 
+	isDataSectionMissing := false
 	data = bytes.ReplaceAll(data, literal.BACKSLASH, nil)
-	data, _, _, err = jsonparser.Get(data, "data")
+	dataContent, _, _, err := jsonparser.Get(data, "data")
 	if err != nil {
 		g.Log.Error("GraphQLDataSource.jsonparser.Get",
 			log.Error(err),
 		)
-		return n, err
+
+		isDataSectionMissing = true
 	}
-	return out.Write(data)
+
+	errorsContent, _, _, err := jsonparser.Get(data, "errors")
+	if err != nil && isDataSectionMissing {
+		g.Log.Error("GraphQLDataSource.jsonparser.GetErrors",
+			log.Error(err),
+		)
+
+		return n, ErrInvalidGraphqlResponse
+	} else if err == nil {
+		var parsedErrData GraphQLErrors
+		err := json.Unmarshal(errorsContent, &parsedErrData)
+		if err != nil {
+			return n, err
+		}
+	}
+
+	return out.Write(dataContent)
+}
+
+func writeGraphqlErrorsIntoContext(ctx context.Context, hookContext HookContext, gqlErrors GraphQLErrors) {
+
 }
