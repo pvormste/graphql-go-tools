@@ -57,27 +57,27 @@ func (p *ProcessStream) traverseNode(node resolve.Node) {
 			if n.Fields[i].Stream != nil {
 				switch array := n.Fields[i].Value.(type) {
 				case *resolve.Array:
-					array.Stream.Enabled = true
-					array.Stream.InitialBatchSize = n.Fields[i].Stream.InitialBatchSize
+					array.Streaming.Enabled = true
+					array.Streaming.InitialBatchSize = n.Fields[i].Stream.InitialBatchSize
 					n.Fields[i].Stream = nil
 				}
 			}
 			p.traverseNode(n.Fields[i].Value)
 		}
 	case *resolve.Array:
-		if n.Stream.Enabled {
+		if n.Streaming.Enabled {
 			p.didUpdate = true
 			patch := &resolve.GraphQLResponsePatch{
 				Value:     n.Item,
 				Operation: literal.ADD,
 			}
-			if n.Stream.InitialBatchSize == 0 {
+			if n.Streaming.InitialBatchSize == 0 {
 				n.Item = nil
 			}
 			p.out.Response.Patches = append(p.out.Response.Patches, patch)
-			n.Stream.PatchIndex = len(p.out.Response.Patches) - 1
+			n.Streaming.PatchIndex = len(p.out.Response.Patches) - 1
 
-			p.traverseNode(p.out.Response.Patches[n.Stream.PatchIndex].Value)
+			p.traverseNode(p.out.Response.Patches[n.Streaming.PatchIndex].Value)
 
 			return
 		}

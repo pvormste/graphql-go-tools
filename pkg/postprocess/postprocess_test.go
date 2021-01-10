@@ -110,7 +110,7 @@ func TestDefaultProcessor_Process(t *testing.T) {
 							BufferID:  0,
 							Name:      []byte("users"),
 							Value: &resolve.Array{
-								Stream: resolve.Stream{
+								Streaming: resolve.Streaming{
 									Enabled:          true,
 									InitialBatchSize: 0,
 									PatchIndex:       1,

@@ -31,7 +31,7 @@ func TestArrayStream(t *testing.T) {
 						BufferID:  0,
 						Name:      []byte("users"),
 						Value: &Array{
-							Stream: Stream{
+							Streaming: Streaming{
 								Enabled:          true,
 								InitialBatchSize: 0,
 								PatchIndex:       0,
@@ -108,7 +108,7 @@ func TestArrayStream_InitialBatch_1(t *testing.T) {
 						BufferID:  0,
 						Name:      []byte("users"),
 						Value: &Array{
-							Stream: Stream{
+							Streaming: Streaming{
 								Enabled:          true,
 								InitialBatchSize: 1,
 								PatchIndex:       0,
@@ -197,7 +197,7 @@ func TestArrayStream_InitialBatch_2(t *testing.T) {
 						BufferID:  0,
 						Name:      []byte("users"),
 						Value: &Array{
-							Stream: Stream{
+							Streaming: Streaming{
 								Enabled:          true,
 								InitialBatchSize: 2,
 								PatchIndex:       0,
@@ -286,7 +286,7 @@ func TestStreamAndDefer(t *testing.T) {
 						BufferID:  0,
 						Name:      []byte("users"),
 						Value: &Array{
-							Stream: Stream{
+							Streaming: Streaming{
 								Enabled:          true,
 								InitialBatchSize: 0,
 								PatchIndex:       0,

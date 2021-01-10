@@ -610,7 +610,7 @@ func (r *Resolver) resolveArray(ctx *Context, array *Array, data []byte, arrayBu
 		return nil
 	}
 
-	if array.ResolveAsynchronous && !array.Stream.Enabled {
+	if array.ResolveAsynchronous && !array.Streaming.Enabled {
 		return r.resolveArrayAsynchronous(ctx, array, arrayItems, arrayBuf)
 	}
 	return r.resolveArraySynchronous(ctx, array, arrayItems, arrayBuf)
@@ -628,10 +628,10 @@ func (r *Resolver) resolveArraySynchronous(ctx *Context, array *Array, arrayItem
 	)
 	for i := range *arrayItems {
 
-		if array.Stream.Enabled {
-			if i > array.Stream.InitialBatchSize-1 {
+		if array.Streaming.Enabled {
+			if i > array.Streaming.InitialBatchSize-1 {
 				ctx.addIntegerPathElement(i)
-				r.preparePatch(ctx, array.Stream.PatchIndex, nil, (*arrayItems)[i])
+				r.preparePatch(ctx, array.Streaming.PatchIndex, nil, (*arrayItems)[i])
 				ctx.removeLastPathElement()
 				continue
 			}
@@ -1178,10 +1178,10 @@ type Array struct {
 	Nullable            bool
 	ResolveAsynchronous bool
 	Item                Node
-	Stream              Stream
+	Streaming           Streaming
 }
 
-type Stream struct {
+type Streaming struct {
 	Enabled          bool
 	InitialBatchSize int
 	PatchIndex       int

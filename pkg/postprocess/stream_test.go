@@ -107,7 +107,7 @@ func TestProcessStream_Process(t *testing.T) {
 							BufferID:  0,
 							Name:      []byte("users"),
 							Value: &resolve.Array{
-								Stream: resolve.Stream{
+								Streaming: resolve.Streaming{
 									Enabled:          true,
 									InitialBatchSize: 0,
 									PatchIndex:       0,
@@ -281,7 +281,7 @@ func TestProcessStream_Process_BatchSize_1(t *testing.T) {
 							BufferID:  0,
 							Name:      []byte("users"),
 							Value: &resolve.Array{
-								Stream: resolve.Stream{
+								Streaming: resolve.Streaming{
 									Enabled:          true,
 									InitialBatchSize: 1,
 								},
