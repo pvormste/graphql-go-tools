@@ -957,8 +957,7 @@ func TestGraphQLDataSource(t *testing.T) {
 		}
 	`, "RemainingJedis", &plan.SubscriptionResponsePlan{
 		Response: resolve.GraphQLSubscription{
-			Trigger: resolve.GraphQLSubscriptionTrigger{
-				ManagerID: []byte("graphql_websocket_subscription"),
+			Trigger: &resolve.GraphQLSubscriptionTrigger{
 				Input:     `{"url":"wss://swapi.com/graphql","body":{"query":"subscription{remainingJedis}"}}`,
 			},
 			Response: &resolve.GraphQLResponse{

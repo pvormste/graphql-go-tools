@@ -10,10 +10,6 @@ import (
 	"github.com/jensneuse/graphql-go-tools/pkg/engine/datasource/httpclient"
 )
 
-var (
-	uniqueIdentifier = []byte("graphql_websocket_subscription")
-)
-
 type Config struct {
 	Scheme string
 	Host   string
@@ -105,6 +101,7 @@ func (g *GraphQLWebsocketSubscriptionStream) Start(input []byte, next chan<- []b
 	}
 }
 
-func (g *GraphQLWebsocketSubscriptionStream) UniqueIdentifier() []byte {
-	return uniqueIdentifier
+func (g *GraphQLWebsocketSubscriptionStream) UniqueIdentifier(input []byte) []byte {
+	_, host, _, _, _ := httpclient.GetSubscriptionInput(input)
+	return host
 }

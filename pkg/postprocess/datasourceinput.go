@@ -21,7 +21,7 @@ func (d *ProcessDataSource) Process(pre plan.Plan) plan.Plan {
 			d.traverseNode(t.Response.Patches[i].Value)
 		}
 	case *plan.SubscriptionResponsePlan:
-		d.traverseTrigger(&t.Response.Trigger)
+		d.traverseTrigger(t.Response.Trigger)
 		d.traverseNode(t.Response.Response.Data)
 	}
 	return pre

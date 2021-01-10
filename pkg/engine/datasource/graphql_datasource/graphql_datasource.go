@@ -29,6 +29,7 @@ const (
 )
 
 type Planner struct {
+	streamManager              resolve.StreamManager
 	visitor                    *plan.Visitor
 	config                     Configuration
 	id                         string
@@ -114,14 +115,13 @@ func (p *Planner) ConfigureFetch() plan.FetchConfiguration {
 }
 
 func (p *Planner) ConfigureSubscription() plan.SubscriptionConfiguration {
-
 	input := httpclient.SetInputBodyWithPath(nil, p.upstreamVariables, "variables")
 	input = httpclient.SetInputBodyWithPath(input, p.printOperation(), "query")
 	input = httpclient.SetInputURL(input, []byte(p.config.Subscription.URL))
 
 	return plan.SubscriptionConfiguration{
-		Input:                 string(input),
-		SubscriptionManagerID: "graphql_websocket_subscription",
+		Input:  string(input),
+		Stream: p.streamManager.Stream(input, &StreamFactory{}),
 	}
 }
 
@@ -613,11 +613,12 @@ type Factory struct {
 	Client httpclient.Client
 }
 
-func (f *Factory) Planner() plan.DataSourcePlanner {
+func (f *Factory) Planner(streamManager resolve.StreamManager) plan.DataSourcePlanner {
 	f.id++
 	return &Planner{
 		id:     strconv.Itoa(f.id),
 		client: f.Client,
+		streamManager: streamManager,
 	}
 }
 
