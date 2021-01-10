@@ -36,7 +36,7 @@ type Factory struct {
 	Client httpclient.Client
 }
 
-func (f *Factory) Planner() plan.DataSourcePlanner {
+func (f *Factory) Planner(streamManager resolve.StreamManager) plan.DataSourcePlanner {
 	return &Planner{
 		client: f.Client,
 	}
@@ -123,7 +123,6 @@ func (p *Planner) ConfigureSubscription() plan.SubscriptionConfiguration {
 
 	return plan.SubscriptionConfiguration{
 		Input:                 string(httpPollingInput),
-		SubscriptionManagerID: "http_polling_stream",
 		Variables:             nil,
 	}
 }

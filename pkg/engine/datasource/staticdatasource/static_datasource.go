@@ -23,7 +23,7 @@ func ConfigJSON(config Configuration) json.RawMessage {
 
 type Factory struct{}
 
-func (f *Factory) Planner() plan.DataSourcePlanner {
+func (f *Factory) Planner(streamManager resolve.StreamManager) plan.DataSourcePlanner {
 	return &Planner{}
 }
 
@@ -45,7 +45,6 @@ func (p *Planner) ConfigureFetch() plan.FetchConfiguration {
 func (p *Planner) ConfigureSubscription() plan.SubscriptionConfiguration {
 	return plan.SubscriptionConfiguration{
 		Input:                 p.config.Data,
-		SubscriptionManagerID: "static",
 	}
 }
 

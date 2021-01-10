@@ -27,7 +27,7 @@ func RunTest(definition, operation, operationName string, expectedPlan plan.Plan
 		norm.NormalizeOperation(&op, &def, &report)
 		valid := astvalidation.DefaultOperationValidator()
 		valid.Validate(&op, &def, &report)
-		p := plan.NewPlanner(config)
+		p := plan.NewPlanner(config,  nil)
 		actualPlan := p.Plan(&op, &def, operationName, &report)
 		if report.HasErrors() {
 			_, err := astprinter.PrintStringIndent(&def, nil, "  ")
