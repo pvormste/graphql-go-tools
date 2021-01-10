@@ -112,6 +112,7 @@ func (s *subscription) run() {
 		case trigger := <-s.removeTrigger:
 			delete(s.triggers, trigger)
 		case result := <-s.results:
+			// send info to multiple triggers - like same subscription
 			for trigger := range s.triggers {
 				trigger.results <- result
 			}

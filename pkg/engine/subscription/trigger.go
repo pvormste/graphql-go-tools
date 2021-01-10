@@ -11,6 +11,10 @@ func NewTrigger(subscriptionID uint64) Trigger {
 	}
 }
 
+// Trigger - is an istance of an active subscriptions
+// trigger has a stream
+// trigger forward results to listener
+// one same input from different clients will result in a single subscription
 type Trigger struct {
 	subscriptionID uint64
 	results        chan []byte
