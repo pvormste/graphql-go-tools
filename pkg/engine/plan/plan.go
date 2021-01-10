@@ -21,6 +21,7 @@ type Planner struct {
 	planningVisitor       *Visitor
 	requiredFieldsWalker  *astvisitor.Walker
 	requiredFieldsVisitor *requiredFieldsVisitor
+	streamManager         *resolve.StreamManager
 }
 
 type Configuration struct {
@@ -98,7 +99,7 @@ func (d *DataSourceConfiguration) HasRootNode(typeName, fieldName string) bool {
 }
 
 type PlannerFactory interface {
-	Planner() DataSourcePlanner
+	Planner(streamManager resolve.StreamManager) DataSourcePlanner
 }
 
 type TypeField struct {
@@ -114,8 +115,7 @@ type FieldMapping struct {
 	RespectOverrideFieldPathFromAlias bool
 }
 
-func NewPlanner(config Configuration) *Planner {
-
+func NewPlanner(config Configuration, streamManager resolve.StreamManager) *Planner {
 	// required fields pre-processing
 
 	requiredFieldsWalker := astvisitor.NewWalker(48)
@@ -131,7 +131,8 @@ func NewPlanner(config Configuration) *Planner {
 
 	configurationWalker := astvisitor.NewWalker(48)
 	configVisitor := &configurationVisitor{
-		walker: &configurationWalker,
+		walker:        &configurationWalker,
+		streamManager: streamManager,
 	}
 
 	configurationWalker.RegisterEnterDocumentVisitor(configVisitor)
@@ -269,7 +270,7 @@ type Visitor struct {
 	currentFields         []objectFields
 	currentField          *resolve.Field
 	planners              []plannerConfiguration
-	fetchConfigurations   []objectFetchConfiguration
+	fetchConfigurations   []objectFetchConfiguration // TODO: maybe pointer as we are modify items
 	fieldBuffers          map[int]int
 	skipFieldPaths        []string
 }
@@ -398,7 +399,7 @@ func (v *Visitor) EnterField(ref int) {
 		if v.fetchConfigurations[i].isSubscription {
 			plan, ok := v.plan.(*SubscriptionResponsePlan)
 			if ok {
-				v.fetchConfigurations[i].trigger = &plan.Response.Trigger
+				v.fetchConfigurations[i].trigger = plan.Response.Trigger
 			}
 		} else {
 			v.fetchConfigurations[i].object = v.objects[len(v.objects)-1]
@@ -655,10 +656,10 @@ func (v *Visitor) resolveInputTemplates(config objectFetchConfiguration, input *
 }
 
 func (v *Visitor) configureSubscription(config objectFetchConfiguration) {
-	subscription := config.planner.ConfigureSubscription()
-	config.trigger.Input = subscription.Input
-	config.trigger.ManagerID = []byte(subscription.SubscriptionManagerID)
-	config.trigger.Variables = subscription.Variables
+	sub := config.planner.ConfigureSubscription()
+	config.trigger.Stream = sub.Stream
+	config.trigger.Input = sub.Input
+	config.trigger.Variables = sub.Variables
 	v.resolveInputTemplates(config, &config.trigger.Input, &config.trigger.Variables)
 }
 
@@ -754,9 +755,9 @@ type DataSourcePlanner interface {
 }
 
 type SubscriptionConfiguration struct {
-	Input                 string
-	SubscriptionManagerID string
-	Variables             resolve.Variables
+	Input     string
+	Variables resolve.Variables
+	Stream    resolve.Stream
 }
 
 type FetchConfiguration struct {
@@ -767,6 +768,7 @@ type FetchConfiguration struct {
 }
 
 type configurationVisitor struct {
+	streamManager         resolve.StreamManager
 	operationName         string
 	operation, definition *ast.Document
 	walker                *astvisitor.Walker
@@ -907,7 +909,7 @@ func (c *configurationVisitor) EnterField(ref int) {
 				bufferID = c.nextBufferID()
 				c.fieldBuffers[ref] = bufferID
 			}
-			planner := c.config.DataSources[i].Factory.Planner()
+			planner := c.config.DataSources[i].Factory.Planner(c.streamManager)
 			c.planners = append(c.planners, plannerConfiguration{
 				bufferID:   bufferID,
 				parentPath: parent,

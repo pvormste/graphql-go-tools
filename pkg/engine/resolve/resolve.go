@@ -19,7 +19,6 @@ import (
 	errors "golang.org/x/xerrors"
 
 	"github.com/jensneuse/graphql-go-tools/internal/pkg/unsafebytes"
-	"github.com/jensneuse/graphql-go-tools/pkg/engine/subscription"
 	"github.com/jensneuse/graphql-go-tools/pkg/fastbuffer"
 	"github.com/jensneuse/graphql-go-tools/pkg/lexer/literal"
 	"github.com/jensneuse/graphql-go-tools/pkg/pool"
@@ -167,6 +166,7 @@ func (f *Fetches) AppendIfUnique(fetch Fetch) {
 	*f = append(*f, fetch)
 }
 
+// TODO: rename to FetchDataSource
 type DataSource interface {
 	Load(ctx context.Context, input []byte, bufPair *BufPair) (err error)
 	UniqueIdentifier() []byte
@@ -184,15 +184,6 @@ type Resolver struct {
 	inflightFetchPool        sync.Pool
 	inflightFetchMu          sync.Mutex
 	inflightFetches          map[uint64]*inflightFetch
-	triggerManagers          map[uint64]*subscription.Manager
-}
-
-func (r *Resolver) RegisterTriggerManager(m *subscription.Manager) {
-	hash64 := r.getHash64()
-	_, _ = hash64.Write(m.UniqueIdentifier())
-	managerID := hash64.Sum64()
-	r.putHash64(hash64)
-	r.triggerManagers[managerID] = m
 }
 
 type inflightFetch struct {
@@ -258,7 +249,6 @@ func New() *Resolver {
 			},
 		},
 		inflightFetches: map[uint64]*inflightFetch{},
-		triggerManagers: map[uint64]*subscription.Manager{},
 	}
 }
 
@@ -405,16 +395,6 @@ func (r *Resolver) ResolveGraphQLResponse(ctx *Context, response *GraphQLRespons
 }
 
 func (r *Resolver) ResolveGraphQLSubscription(ctx *Context, subscription *GraphQLSubscription, writer FlushWriter) (err error) {
-	hash64 := r.getHash64()
-	_, _ = hash64.Write(subscription.Trigger.ManagerID)
-	managerID := hash64.Sum64()
-	r.putHash64(hash64)
-
-	manager, ok := r.triggerManagers[managerID]
-	if !ok {
-		return fmt.Errorf("trigger manager not found for id: %s", string(subscription.Trigger.ManagerID))
-	}
-
 	buf := r.getBufPair()
 	err = subscription.Trigger.InputTemplate.Render(ctx, nil, buf.Data)
 	if err != nil {
@@ -425,11 +405,12 @@ func (r *Resolver) ResolveGraphQLSubscription(ctx *Context, subscription *GraphQ
 	copy(triggerInput, rendered)
 	r.freeBufPair(buf)
 
-	trigger := manager.StartTrigger(triggerInput)
-	defer manager.StopTrigger(trigger)
+	sub := newSubscriber()
+	go subscription.Trigger.Stream.Start(triggerInput, sub)
+	defer sub.Stop()
 
 	for {
-		data, ok := trigger.Next(ctx)
+		data, ok := sub.Next(ctx)
 		if !ok {
 			return nil
 		}
@@ -1290,12 +1271,12 @@ func (o *ObjectVariable) VariableKind() VariableKind {
 }
 
 type GraphQLSubscription struct {
-	Trigger  GraphQLSubscriptionTrigger
+	Trigger  *GraphQLSubscriptionTrigger
 	Response *GraphQLResponse
 }
 
 type GraphQLSubscriptionTrigger struct {
-	ManagerID     []byte
+	Stream Stream
 	Input         string
 	InputTemplate InputTemplate
 	Variables     Variables

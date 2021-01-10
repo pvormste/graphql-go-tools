@@ -1278,10 +1278,17 @@ func TestResolver_ResolveGraphQLSubscription(t *testing.T) {
 	manCtx, cancelMan := context.WithCancel(context.Background())
 	defer cancelMan()
 	man.Run(manCtx.Done())
-	resolver.RegisterTriggerManager(man)
+
+	// data source should put a stream on graphql subscription trigger
+	// stream manager should be part of a resolver - maybe we don't need a manager at all
+	// resolver should pick a stream from datasource?
+
+	// PLANNER SHOULD CARE THAT WE HAVE A SINGLE STREAM PER HOST!!!
+	// and all subscriptions should run from them
+
 	plan := &GraphQLSubscription{
-		Trigger: GraphQLSubscriptionTrigger{
-			ManagerID: []byte("fake"),
+		Trigger: &GraphQLSubscriptionTrigger{
+			Stream: nil, // TODO: provide stream and fix test
 			Input:     "",
 		},
 		Response: &GraphQLResponse{
