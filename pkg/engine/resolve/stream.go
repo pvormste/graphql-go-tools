@@ -1,12 +1,20 @@
 package resolve
 
-type Stream interface {
-	Start(input []byte, subscriber StreamSubscriber)
+// assumption: the resolver (stateful) keeps track of open host connections
+
+
+type StopSubscription struct {
+	ch <-chan struct{}
+}
+
+type Subscription struct {
+	id      uint64
+	Results <-chan []byte
 }
 
 type StreamSubscriber interface {
 	Results() chan<- []byte
-	Done() <-chan struct{}
+	Stop() <-chan struct{}
 }
 
 type StreamFactory interface {

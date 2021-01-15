@@ -25,7 +25,27 @@ func (s *Stream) addSubscriber(subscriber resolve.StreamSubscriber) {
 	s.Unlock()
 }
 
+// assumption: each stream is only responsible for one single host, therefore it has at max one open connection to the host
+// when Start is called: check if websocket is open, if closed initiate connection
+// assumption: Start gets only called at max once for the same hash(input) -> we don't have to check if there's already an existing subscription for the input
+
+// based on the input, start the stream (e.g. GraphQL subcription, Kafka topic, etc.)
+// post new messages to subscriber.Next
+// check if subscriber.Done -> if done, stop subscription for input
+
+// keep track of all open subscriptions
+// if all open subscriptions called done() -> close connection to host & return function to stop stream
+
 func (s *Stream) Start(input []byte, subscriber resolve.StreamSubscriber) {
+
+
+	// s.Active
+	// start
+
+	// last subscriber unsrubed
+	// s. -> Inactive
+	// stops
+
 	go func() {
 		s.addSubscriber(subscriber)
 	}()

@@ -405,6 +405,11 @@ func (r *Resolver) ResolveGraphQLSubscription(ctx *Context, subscription *GraphQ
 	copy(triggerInput, rendered)
 	r.freeBufPair(buf)
 
+	sub := subscription.Trigger.Stream.StartSubscription()
+	defer subscription.Trigger.Stream.StopSubscription(sub)
+
+
+
 	sub := newSubscriber()
 	go subscription.Trigger.Stream.Start(triggerInput, sub)
 	defer sub.Stop()
