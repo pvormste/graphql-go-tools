@@ -13,23 +13,34 @@ type RequestFieldsValidator interface {
 type fieldsValidator struct {
 }
 
-func (d fieldsValidator) Validate(request *Request, schema *Schema, restrictions []Type) (RequestFieldsValidationResult, error) {
+func (d fieldsValidator) Validate(request *Request, schema *Schema, allowedFields []Type) (RequestFieldsValidationResult, error) {
 	report := operationreport.Report{}
-	if len(restrictions) == 0 {
-		return fieldsValidationResult(report, true, "", "")
+	if len(allowedFields) == 0 {
+		return fieldsValidationResult(report, false, "_ALL_", "_ALL_")
 	}
 
 	requestedTypes := make(RequestTypes)
 	NewExtractor().ExtractFieldsFromRequest(request, schema, &report, requestedTypes)
 
-	for _, restrictedType := range restrictions {
-		requestedFields, hasRestrictedType := requestedTypes[restrictedType.Name]
-		if !hasRestrictedType {
-			continue
+	allowedTypes := make(RequestTypes)
+	for _, field := range allowedFields {
+		fields := make(RequestFields)
+		for _, fieldName := range field.Fields {
+			fields[fieldName] = struct{}{}
 		}
-		for _, field := range restrictedType.Fields {
-			if _, hasRestrictedField := requestedFields[field]; hasRestrictedField {
-				return fieldsValidationResult(report, false, restrictedType.Name, field)
+		allowedTypes[field.Name] = fields
+	}
+
+	for requestedTypeName, requestedFields := range requestedTypes {
+		fieldsAllowance, isTypeAllowed := allowedTypes[requestedTypeName]
+
+		if !isTypeAllowed {
+			return fieldsValidationResult(report, false, requestedTypeName, "")
+		}
+
+		for fieldName, _ := range requestedFields {
+			if _, isFieldAllowed := fieldsAllowance[fieldName]; !isFieldAllowed {
+				return fieldsValidationResult(report, false, requestedTypeName, fieldName)
 			}
 		}
 	}
@@ -50,8 +61,15 @@ func fieldsValidationResult(report operationreport.Report, valid bool, typeName,
 
 	var errors OperationValidationErrors
 	if !result.Valid {
+		var msgStr string
+		if fieldName != "" {
+			msgStr = fmt.Sprintf("field: %s is not allowed on type: %s", fieldName, typeName)
+		} else {
+			msgStr = fmt.Sprintf("type: %s is not allowed", typeName)
+		}
+
 		errors = append(errors, OperationValidationError{
-			Message: fmt.Sprintf("field: %s is restricted on type: %s", fieldName, typeName),
+			Message: msgStr,
 		})
 	}
 	result.Errors = errors

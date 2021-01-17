@@ -105,34 +105,33 @@ func TestRequest_ValidateRestrictedFields(t *testing.T) {
 		assert.False(t, result.Valid)
 	})
 
-	t.Run("should allow request when no restrictions set", func(t *testing.T) {
+	t.Run("should deny request when no allowed fields set", func(t *testing.T) {
 		schema := starwarsSchema(t)
 		request := requestForQuery(t, starwars.FileSimpleHeroQuery)
 
 		result, err := request.ValidateRestrictedFields(schema, nil)
 		assert.NoError(t, err)
-		assert.True(t, result.Valid)
+		assert.False(t, result.Valid)
 	})
 
-	t.Run("when restrictions set", func(t *testing.T) {
+	t.Run("when allowed fields set", func(t *testing.T) {
 		schema := starwarsSchema(t)
-		restrictedFields := []Type{
-			{Name: "Query", Fields: []string{"droid"}},
-			{Name: "Mutation", Fields: []string{"createReview"}},
-			{Name: "Character", Fields: []string{"friends"}},
-			{Name: "Starship", Fields: []string{"length"}},
+
+		allowedFields := []Type{
+			{Name: "Query", Fields: []string{"hero"}},
+			{Name: "Character", Fields: []string{"name"}},
 		}
 
 		t.Run("should allow request", func(t *testing.T) {
 			t.Run("when only allowed fields requested", func(t *testing.T) {
 				request := requestForQuery(t, starwars.FileSimpleHeroQuery)
-				result, err := request.ValidateRestrictedFields(schema, restrictedFields)
+				result, err := request.ValidateRestrictedFields(schema, allowedFields)
 				assert.NoError(t, err)
 				assert.True(t, result.Valid)
 				assert.Empty(t, result.Errors)
 
 				request = requestForQuery(t, starwars.FileHeroWithAliasesQuery)
-				result, err = request.ValidateRestrictedFields(schema, restrictedFields)
+				result, err = request.ValidateRestrictedFields(schema, allowedFields)
 				assert.NoError(t, err)
 				assert.True(t, result.Valid)
 				assert.Empty(t, result.Errors)
@@ -140,44 +139,57 @@ func TestRequest_ValidateRestrictedFields(t *testing.T) {
 		})
 
 		t.Run("should disallow request", func(t *testing.T) {
-			t.Run("when query is restricted", func(t *testing.T) {
+			t.Run("when query is not allowed", func(t *testing.T) {
 				request := requestForQuery(t, starwars.FileDroidWithArgAndVarQuery)
-				result, err := request.ValidateRestrictedFields(schema, restrictedFields)
+				result, err := request.ValidateRestrictedFields(schema, allowedFields)
 				assert.NoError(t, err)
 				assert.False(t, result.Valid)
 				assert.Error(t, result.Errors)
 
 				var buf bytes.Buffer
 				_, _ = result.Errors.WriteResponse(&buf)
-				assert.Equal(t, `{"errors":[{"message":"field: droid is restricted on type: Query"}]}`, buf.String())
+				assert.Equal(t, `{"errors":[{"message":"field: droid is not allowed on type: Query"}]}`, buf.String())
 			})
 
-			t.Run("when mutation is restricted", func(t *testing.T) {
+			t.Run("when mutation is not allowed", func(t *testing.T) {
 				request := requestForQuery(t, starwars.FileCreateReviewMutation)
-				result, err := request.ValidateRestrictedFields(schema, restrictedFields)
+				result, err := request.ValidateRestrictedFields(schema, allowedFields)
 				assert.NoError(t, err)
 				assert.False(t, result.Valid)
 				assert.Error(t, result.Errors)
+
+				var buf bytes.Buffer
+				_, _ = result.Errors.WriteResponse(&buf)
+				assert.Equal(t, `{"errors":[{"message":"type: Mutation is not allowed"}]}`, buf.String())
 			})
 
-			t.Run("when type field is restricted", func(t *testing.T) {
+			t.Run("when requested dissalowed field", func(t *testing.T) {
 				request := requestForQuery(t, starwars.FileUnionQuery)
-				result, err := request.ValidateRestrictedFields(schema, restrictedFields)
+				result, err := request.ValidateRestrictedFields(schema, allowedFields)
 				assert.NoError(t, err)
 				assert.False(t, result.Valid)
 				assert.Error(t, result.Errors)
+
+				var buf bytes.Buffer
+				_, _ = result.Errors.WriteResponse(&buf)
+				assert.Equal(t, `{"errors":[{"message":"field: friends is not allowed on type: Character"}]}`, buf.String())
 			})
 
-			t.Run("when mutation response type has restricted field", func(t *testing.T) {
-				restrictedFields := []Type{
-					{Name: "Review", Fields: []string{"id"}},
+			t.Run("when mutation response type has not allowed field", func(t *testing.T) {
+				allowedFields := []Type{
+					{Name: "Mutation", Fields: []string{"createReview"}},
+					{Name: "Review", Fields: []string{"id", "stars"}},
 				}
 
 				request := requestForQuery(t, starwars.FileCreateReviewMutation)
-				result, err := request.ValidateRestrictedFields(schema, restrictedFields)
+				result, err := request.ValidateRestrictedFields(schema, allowedFields)
 				assert.NoError(t, err)
 				assert.False(t, result.Valid)
 				assert.Error(t, result.Errors)
+
+				var buf bytes.Buffer
+				_, _ = result.Errors.WriteResponse(&buf)
+				assert.Equal(t, `{"errors":[{"message":"field: commentary is not allowed on type: Review"}]}`, buf.String())
 			})
 		})
 	})

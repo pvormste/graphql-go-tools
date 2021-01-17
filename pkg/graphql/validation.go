@@ -25,7 +25,7 @@ func (r *Request) ValidateForSchema(schema *Schema) (result ValidationResult, er
 	return operationValidationResultFromReport(report)
 }
 
-func (r *Request) ValidateRestrictedFields(schema *Schema, restrictedFields []Type) (RequestFieldsValidationResult, error) {
+func (r *Request) ValidateRestrictedFields(schema *Schema, allowedFields []Type) (RequestFieldsValidationResult, error) {
 	if schema == nil {
 		return RequestFieldsValidationResult{Valid: false}, ErrNilSchema
 	}
@@ -36,7 +36,7 @@ func (r *Request) ValidateRestrictedFields(schema *Schema, restrictedFields []Ty
 	}
 
 	var fieldsValidator RequestFieldsValidator = fieldsValidator{}
-	return fieldsValidator.Validate(r, schema, restrictedFields)
+	return fieldsValidator.Validate(r, schema, allowedFields)
 }
 
 func operationValidationResultFromReport(report operationreport.Report) (ValidationResult, error) {
