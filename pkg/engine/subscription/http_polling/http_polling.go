@@ -10,7 +10,7 @@ import (
 	"github.com/cespare/xxhash"
 	"github.com/tidwall/sjson"
 
-	"github.com/jensneuse/graphql-go-tools/pkg/engine/datasource/httpclient"
+	"github.com/TykTechnologies/graphql-go-tools/pkg/engine/datasource/httpclient"
 )
 
 func SetInputIntervalMillis(input []byte, interval int64) []byte {

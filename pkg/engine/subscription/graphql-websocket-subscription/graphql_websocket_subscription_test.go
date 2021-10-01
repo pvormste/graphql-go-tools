@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/atomic"
 
-	"github.com/jensneuse/graphql-go-tools/pkg/engine/subscription"
+	"github.com/TykTechnologies/graphql-go-tools/pkg/engine/subscription"
 )
 
 func TestGraphQLWebsocketSubscriptionStream(t *testing.T) {
@@ -100,6 +100,6 @@ func TestGraphQLWebsocketSubscriptionStream(t *testing.T) {
 	// We'll refactor subscriptions soon.
 	// That said, you're invited to try them.
 	// Things should work fine, testing concurrency is just a bit more complicated.
-	<- time.After(time.Second)
+	<-time.After(time.Second)
 	t.SkipNow()
 }

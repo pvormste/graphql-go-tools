@@ -1,7 +1,7 @@
 package subscription
 
 import (
-	"github.com/jensneuse/graphql-go-tools/pkg/pool"
+	"github.com/TykTechnologies/graphql-go-tools/pkg/pool"
 )
 
 func NewManager(stream Stream) *Manager {

@@ -11,8 +11,8 @@ import (
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 
-	"github.com/jensneuse/graphql-go-tools/internal/pkg/quotes"
-	"github.com/jensneuse/graphql-go-tools/pkg/lexer/literal"
+	"github.com/TykTechnologies/graphql-go-tools/internal/pkg/quotes"
+	"github.com/TykTechnologies/graphql-go-tools/pkg/lexer/literal"
 )
 
 const (
@@ -21,7 +21,7 @@ const (
 	BASEURL     = "base_url"
 	METHOD      = "method"
 	BODY        = "body"
-	HEADER     = "header"
+	HEADER      = "header"
 	QUERYPARAMS = "query_params"
 
 	SCHEME = "scheme"

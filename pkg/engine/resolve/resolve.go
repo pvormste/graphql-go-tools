@@ -20,11 +20,11 @@ import (
 
 	errors "golang.org/x/xerrors"
 
-	"github.com/jensneuse/graphql-go-tools/internal/pkg/unsafebytes"
-	"github.com/jensneuse/graphql-go-tools/pkg/engine/subscription"
-	"github.com/jensneuse/graphql-go-tools/pkg/fastbuffer"
-	"github.com/jensneuse/graphql-go-tools/pkg/lexer/literal"
-	"github.com/jensneuse/graphql-go-tools/pkg/pool"
+	"github.com/TykTechnologies/graphql-go-tools/internal/pkg/unsafebytes"
+	"github.com/TykTechnologies/graphql-go-tools/pkg/engine/subscription"
+	"github.com/TykTechnologies/graphql-go-tools/pkg/fastbuffer"
+	"github.com/TykTechnologies/graphql-go-tools/pkg/lexer/literal"
+	"github.com/TykTechnologies/graphql-go-tools/pkg/pool"
 )
 
 var (
@@ -844,7 +844,7 @@ func (r *Resolver) resolveObject(ctx *Context, object *Object, data []byte, obje
 		err = r.resolveNode(ctx, object.Fields[i].Value, fieldData, fieldBuf)
 		ctx.removeLastPathElement()
 		if err != nil {
-			if errors.Is(err,errTypeNameSkipped){
+			if errors.Is(err, errTypeNameSkipped) {
 				objectBuf.Data.Reset()
 				r.resolveEmptyObject(objectBuf.Data)
 				return nil

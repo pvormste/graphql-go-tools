@@ -10,7 +10,7 @@ import (
 	"github.com/jensneuse/abstractlogger"
 	"github.com/valyala/fasthttp"
 
-	"github.com/jensneuse/graphql-go-tools/pkg/lexer/literal"
+	"github.com/TykTechnologies/graphql-go-tools/pkg/lexer/literal"
 )
 
 type FastHttpClient struct {

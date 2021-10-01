@@ -12,8 +12,8 @@ import (
 	"github.com/gorilla/websocket"
 	byte_template "github.com/jensneuse/byte-template"
 
-	"github.com/jensneuse/graphql-go-tools/internal/pkg/unsafebytes"
-	"github.com/jensneuse/graphql-go-tools/pkg/pool"
+	"github.com/TykTechnologies/graphql-go-tools/internal/pkg/unsafebytes"
+	"github.com/TykTechnologies/graphql-go-tools/pkg/pool"
 )
 
 var (

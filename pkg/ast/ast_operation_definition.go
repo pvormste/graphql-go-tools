@@ -3,8 +3,8 @@ package ast
 import (
 	"math"
 
-	"github.com/jensneuse/graphql-go-tools/internal/pkg/unsafebytes"
-	"github.com/jensneuse/graphql-go-tools/pkg/lexer/position"
+	"github.com/TykTechnologies/graphql-go-tools/internal/pkg/unsafebytes"
+	"github.com/TykTechnologies/graphql-go-tools/pkg/lexer/position"
 )
 
 type OperationType int
@@ -94,7 +94,7 @@ func (d *Document) OperationNameExists(operationName string) bool {
 	return false
 }
 
-func (d *Document) NumOfOperationDefinitions () (n int) {
+func (d *Document) NumOfOperationDefinitions() (n int) {
 	for i := range d.RootNodes {
 		if d.RootNodes[i].Kind == NodeKindOperationDefinition {
 			n++
