@@ -38,6 +38,6 @@ require (
 	nhooyr.io/websocket v1.8.7
 )
 
-replace github.com/TykTechnologies/graphql-go-tools/examples/federation => ./examples/federation
+// replace github.com/TykTechnologies/graphql-go-tools/examples/federation => ./examples/federation
 
-replace github.com/TykTechnologies/graphql-go-tools/examples/chat => ./examples/chat
+// replace github.com/TykTechnologies/graphql-go-tools/examples/chat => ./examples/chat
