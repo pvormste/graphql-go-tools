@@ -4,8 +4,8 @@ go 1.15
 
 require (
 	github.com/OneOfOne/xxhash v1.2.8
-	github.com/TykTechnologies/graphql-go-tools/examples/chat v0.0.0-00010101000000-000000000000
-	github.com/TykTechnologies/graphql-go-tools/examples/federation v0.0.0-00010101000000-000000000000
+	github.com/jensneuse/graphql-go-tools/examples/chat v0.0.0-20210714083836-7bf4457dc2b2
+	github.com/jensneuse/graphql-go-tools/examples/federation v0.0.0-20210714083836-7bf4457dc2b2
 	github.com/agnivade/levenshtein v1.1.1 // indirect
 	github.com/buger/jsonparser v1.1.1
 	github.com/cespare/xxhash v1.1.0
@@ -43,5 +43,4 @@ require (
 )
 
 replace github.com/TykTechnologies/graphql-go-tools/examples/federation => ./examples/federation
-
 replace github.com/TykTechnologies/graphql-go-tools/examples/chat => ./examples/chat
