@@ -4,8 +4,8 @@ go 1.15
 
 require (
 	github.com/OneOfOne/xxhash v1.2.8
-	github.com/jensneuse/graphql-go-tools/examples/chat v0.0.0-20210714083836-7bf4457dc2b2
-	github.com/jensneuse/graphql-go-tools/examples/federation v0.0.0-20210714083836-7bf4457dc2b2
+	github.com/TykTechnologies/graphql-go-tools/examples/chat v0.0.0-20211001181535-d99d0e668bd2
+	github.com/TykTechnologies/graphql-go-tools/examples/federation v0.0.0-20211001181535-d99d0e668bd2
 	github.com/agnivade/levenshtein v1.1.1 // indirect
 	github.com/buger/jsonparser v1.1.1
 	github.com/cespare/xxhash v1.1.0
@@ -39,8 +39,10 @@ require (
 	go.uber.org/atomic v1.9.0
 	go.uber.org/zap v1.18.1
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
+	google.golang.org/protobuf v1.27.1 // indirect
 	nhooyr.io/websocket v1.8.7
 )
 
 replace github.com/TykTechnologies/graphql-go-tools/examples/federation => ./examples/federation
+
 replace github.com/TykTechnologies/graphql-go-tools/examples/chat => ./examples/chat
