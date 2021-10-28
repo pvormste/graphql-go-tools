@@ -1,5 +1,12 @@
 # graphql-go-tools test tasks
 
+## How to do the task
+
+1. Clone this repo [TykTechnologies/graphql-go-tools](https://github.com/TykTechnologies/graphql-go-tools)
+2. Switch to [test-task](https://github.com/TykTechnologies/graphql-go-tools/tree/test-task) branch
+3. Play with tasks code and try to make tests green
+4. We will need a discussion around test task so no push is required
+
 ### Example graphql schema for task 1 & task 2
 
 ```graphql
