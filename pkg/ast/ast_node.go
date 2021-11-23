@@ -87,6 +87,16 @@ func (d *Document) NodeNameString(node Node) string {
 
 // Node directives
 
+// NodeHasDirectiveByNameString returns whether the given node has a directive with the given name as string.
+func (d *Document) NodeHasDirectiveByNameString(node Node, directiveName string) bool {
+	for _, directiveRef := range d.NodeDirectives(node) {
+		if d.DirectiveNameString(directiveRef) == directiveName {
+			return true
+		}
+	}
+	return false
+}
+
 func (d *Document) NodeDirectives(node Node) []int {
 	switch node.Kind {
 	case NodeKindField:
@@ -403,6 +413,34 @@ func (d *Document) RemoveNodeFromSelectionSet(set int, node Node) {
 			d.SelectionSets[set].SelectionRefs = append(d.SelectionSets[set].SelectionRefs[:i], d.SelectionSets[set].SelectionRefs[i+1:]...)
 			return
 		}
+	}
+}
+
+// NodeInterfaceRefs returns the interfaces implemented by the given node (this is
+// only applicable to object kinds).
+// Returns nil if node kind is not an object kind.
+func (d *Document) NodeInterfaceRefs(node Node) (refs []int) {
+	switch node.Kind {
+	case NodeKindObjectTypeDefinition:
+		return d.ObjectTypeDefinitions[node.Ref].ImplementsInterfaces.Refs
+	case NodeKindObjectTypeExtension:
+		return d.ObjectTypeExtensions[node.Ref].ImplementsInterfaces.Refs
+	default:
+		return nil
+	}
+}
+
+// NodeUnionMemberRefs returns the union members of the given node (this is only
+// applicable to union kinds).
+// Returns nil if node kind is not an object kind.
+func (d *Document) NodeUnionMemberRefs(node Node) (refs []int) {
+	switch node.Kind {
+	case NodeKindUnionTypeDefinition:
+		return d.UnionTypeDefinitions[node.Ref].UnionMemberTypes.Refs
+	case NodeKindUnionTypeExtension:
+		return d.UnionTypeExtensions[node.Ref].UnionMemberTypes.Refs
+	default:
+		return nil
 	}
 }
 

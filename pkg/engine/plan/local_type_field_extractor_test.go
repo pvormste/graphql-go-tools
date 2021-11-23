@@ -710,6 +710,10 @@ func TestLocalTypeFieldExtractor_GetAllNodes(t *testing.T) {
 	})
 }
 
+/*
+BenchmarkGetAllNodes
+BenchmarkGetAllNodes-12    	   37358	     29909 ns/op	   10803 B/op	     173 allocs/op
+*/
 func BenchmarkGetAllNodes(b *testing.B) {
 	document := unsafeparser.ParseGraphqlDocumentString(benchmarkSDL)
 

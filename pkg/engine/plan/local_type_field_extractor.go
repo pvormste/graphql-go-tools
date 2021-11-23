@@ -103,7 +103,7 @@ func (e *LocalTypeFieldExtractor) GetAllNodes() ([]TypeField, []TypeField) {
 
 		switch astNode.Kind {
 		case ast.NodeKindObjectTypeDefinition, ast.NodeKindObjectTypeExtension:
-			for _, ref := range e.interfaceRefs(astNode) {
+			for _, ref := range e.document.NodeInterfaceRefs(astNode) {
 				interfaceName := e.document.ResolveTypeNameString(ref)
 				// The document doesn't provide a way to directly look up the
 				// types that implement an interface, so instead we track the
@@ -116,7 +116,7 @@ func (e *LocalTypeFieldExtractor) GetAllNodes() ([]TypeField, []TypeField) {
 		case ast.NodeKindInterfaceTypeDefinition, ast.NodeKindInterfaceTypeExtension:
 			isInterface = true
 		case ast.NodeKindUnionTypeDefinition, ast.NodeKindUnionTypeExtension:
-			for _, ref := range e.unionMemberRefs(astNode) {
+			for _, ref := range e.document.NodeUnionMemberRefs(astNode) {
 				memberName := e.document.ResolveTypeNameString(ref)
 				concreteTypeNames = append(concreteTypeNames, memberName)
 			}
@@ -130,7 +130,7 @@ func (e *LocalTypeFieldExtractor) GetAllNodes() ([]TypeField, []TypeField) {
 			nodeInfoMap[typeName] = nodeInfo
 		}
 
-		hasKey := e.NodeHasKeyDirective(astNode)
+		hasKey := e.document.NodeHasDirectiveByNameString(astNode, federationKeyDirectiveName)
 		isFederationEntity := hasKey && !isInterface
 
 		isRootNode := typeName == queryType ||
@@ -252,40 +252,4 @@ func (e *LocalTypeFieldExtractor) GetAllNodes() ([]TypeField, []TypeField) {
 	}
 
 	return rootNodes, childNodes
-}
-
-// interfaceRefs returns the interfaces implemented by the given node (this is
-// only applicable to object kinds).
-func (e *LocalTypeFieldExtractor) interfaceRefs(node ast.Node) []int {
-	switch node.Kind {
-	case ast.NodeKindObjectTypeDefinition:
-		return e.document.ObjectTypeDefinitions[node.Ref].ImplementsInterfaces.Refs
-	case ast.NodeKindObjectTypeExtension:
-		return e.document.ObjectTypeExtensions[node.Ref].ImplementsInterfaces.Refs
-	default:
-		return nil
-	}
-}
-
-// unionMemberRefs returns the union members of the given node (this is only
-// applicable to union kinds).
-func (e *LocalTypeFieldExtractor) unionMemberRefs(node ast.Node) []int {
-	switch node.Kind {
-	case ast.NodeKindUnionTypeDefinition:
-		return e.document.UnionTypeDefinitions[node.Ref].UnionMemberTypes.Refs
-	case ast.NodeKindUnionTypeExtension:
-		return e.document.UnionTypeExtensions[node.Ref].UnionMemberTypes.Refs
-	default:
-		return nil
-	}
-}
-
-// NodeHasKeyDirective returns whether the given node has a @key directive.
-func (e *LocalTypeFieldExtractor) NodeHasKeyDirective(node ast.Node) bool {
-	for _, directiveRef := range e.document.NodeDirectives(node) {
-		if e.document.DirectiveNameString(directiveRef) == federationKeyDirectiveName {
-			return true
-		}
-	}
-	return false
 }
