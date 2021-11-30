@@ -29,6 +29,8 @@ type LocalTypeFieldExtractor struct {
 	rootNodeNames          *rootNodeNamesMap
 	childrenSeen           map[string]struct{}
 	childrenToProcess      []string
+	rootNodes              []TypeField
+	childNodes             []TypeField
 }
 
 func NewLocalTypeFieldExtractor(document *ast.Document) *LocalTypeFieldExtractor {
@@ -37,6 +39,8 @@ func NewLocalTypeFieldExtractor(document *ast.Document) *LocalTypeFieldExtractor
 		queryTypeName:        "Query",
 		mutationTypeName:     "Mutation",
 		subscriptionTypeName: "Subscription",
+		rootNodes:            make([]TypeField, 0),
+		childNodes:           make([]TypeField, 0),
 	}
 }
 
@@ -80,22 +84,6 @@ func (r *rootNodeNamesMap) asSlice() []string {
 	return s
 }
 
-// appendIfNotPresent appends a string to the given slice if the string isn't
-// already present in the slice.
-func appendIfNotPresent(slice []string, value string) []string {
-	var hasValue bool
-	for _, existingValue := range slice {
-		if value == existingValue {
-			hasValue = true
-			break
-		}
-	}
-	if !hasValue {
-		return append(slice, value)
-	}
-	return slice
-}
-
 // GetAllNodes returns all root and child nodes in the document associated with
 // the LocalTypeFieldExtractor. See LocalTypeFieldExtractor for a detailed
 // explanation of what root and child nodes are.
@@ -133,58 +121,19 @@ func (e *LocalTypeFieldExtractor) GetAllNodes() ([]TypeField, []TypeField) {
 	// Record the concrete types for each interface.
 	e.assignConcreteTypesToInterfaces()
 
-	// This is the queue used in step 3, child node construction.
-	e.childrenSeen = make(map[string]struct{}, len(e.nodeInfoMap))
-	e.childrenToProcess = make([]string, 0, len(e.nodeInfoMap))
-
-	var rootNodes, childNodes []TypeField
+	// Make sure that root and child node slices are cleared
+	e.resetRootAndChildNodes()
 
 	// 2. Create the root nodes. Also, loop over the fields to find additional
 	// child nodes to process.
-	for _, typeName := range e.rootNodeNames.asSlice() {
-		nodeInfo := e.nodeInfoMap[typeName]
-		numFields := len(nodeInfo.localFieldRefs)
-		if numFields == 0 {
-			continue
-		}
-		fieldNames := make([]string, numFields)
-		for i, ref := range nodeInfo.localFieldRefs {
-			fieldNames[i] = e.processFieldRef(ref)
-		}
-		rootNodes = append(rootNodes, TypeField{
-			TypeName:   typeName,
-			FieldNames: fieldNames,
-		})
-	}
+	e.createRootNodes()
 
 	// 3. Process the child node queue to create child nodes. When processing
 	// child nodes, loop over the fields of the child to find additional
 	// children to process.
-	for len(e.childrenToProcess) > 0 {
-		typeName := e.childrenToProcess[len(e.childrenToProcess)-1]
-		e.childrenToProcess = e.childrenToProcess[:len(e.childrenToProcess)-1]
-		nodeInfo, ok := e.nodeInfoMap[typeName]
-		if !ok {
-			continue
-		}
-		numFields := len(nodeInfo.localFieldRefs) + len(nodeInfo.externalFieldRefs)
-		if numFields == 0 {
-			continue
-		}
-		fieldNames := make([]string, 0, numFields)
-		for _, ref := range nodeInfo.localFieldRefs {
-			fieldNames = append(fieldNames, e.processFieldRef(ref))
-		}
-		for _, ref := range nodeInfo.externalFieldRefs {
-			fieldNames = append(fieldNames, e.processFieldRef(ref))
-		}
-		childNodes = append(childNodes, TypeField{
-			TypeName:   typeName,
-			FieldNames: fieldNames,
-		})
-	}
+	e.createChildNodes()
 
-	return rootNodes, childNodes
+	return e.rootNodes, e.childNodes
 }
 
 func (e *LocalTypeFieldExtractor) overrideRootOperationTypeNames() {
@@ -317,4 +266,57 @@ func (e *LocalTypeFieldExtractor) processFieldRef(ref int) string {
 		}
 	}
 	return e.document.FieldDefinitionNameString(ref)
+}
+
+func (e *LocalTypeFieldExtractor) resetRootAndChildNodes() {
+	e.rootNodes = e.rootNodes[:0]
+	e.childNodes = e.childNodes[:0]
+
+	// This is the queue used in step 3, child node construction.
+	e.childrenSeen = make(map[string]struct{}, len(e.nodeInfoMap))
+	e.childrenToProcess = make([]string, 0, len(e.nodeInfoMap))
+}
+
+func (e *LocalTypeFieldExtractor) createRootNodes() {
+	for _, typeName := range e.rootNodeNames.asSlice() {
+		nodeInfo := e.nodeInfoMap[typeName]
+		numFields := len(nodeInfo.localFieldRefs)
+		if numFields == 0 {
+			continue
+		}
+		fieldNames := make([]string, numFields)
+		for i, ref := range nodeInfo.localFieldRefs {
+			fieldNames[i] = e.processFieldRef(ref)
+		}
+		e.rootNodes = append(e.rootNodes, TypeField{
+			TypeName:   typeName,
+			FieldNames: fieldNames,
+		})
+	}
+}
+
+func (e *LocalTypeFieldExtractor) createChildNodes() {
+	for len(e.childrenToProcess) > 0 {
+		typeName := e.childrenToProcess[len(e.childrenToProcess)-1]
+		e.childrenToProcess = e.childrenToProcess[:len(e.childrenToProcess)-1]
+		nodeInfo, ok := e.nodeInfoMap[typeName]
+		if !ok {
+			continue
+		}
+		numFields := len(nodeInfo.localFieldRefs) + len(nodeInfo.externalFieldRefs)
+		if numFields == 0 {
+			continue
+		}
+		fieldNames := make([]string, 0, numFields)
+		for _, ref := range nodeInfo.localFieldRefs {
+			fieldNames = append(fieldNames, e.processFieldRef(ref))
+		}
+		for _, ref := range nodeInfo.externalFieldRefs {
+			fieldNames = append(fieldNames, e.processFieldRef(ref))
+		}
+		e.childNodes = append(e.childNodes, TypeField{
+			TypeName:   typeName,
+			FieldNames: fieldNames,
+		})
+	}
 }
