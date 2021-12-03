@@ -11,7 +11,7 @@ import (
 )
 
 type inflightFetch struct {
-	waitLoad sync.WaitGroup
+	waitLoad chan struct{}
 	waitFree sync.WaitGroup
 	err      error
 	bufPair  BufPair
@@ -111,21 +111,27 @@ func (f *Fetcher) handleSingleFlight(ctx *Context, fetch *SingleFetch, preparedI
 		defer inflight.waitFree.Done()
 		f.inflightFetchMu.Unlock()
 
-		inflight.waitLoad.Wait()
+		select {
+		case <-ctx.Context.Done():
+			return ctx.Context.Err()
+		case <-inflight.waitLoad:
+			break
+		}
+
 		f.handleAfterFetchHook(ctx, &inflight.bufPair, true)
 		f.writeSingleFlightResult(&inflight.bufPair, responseBuf)
 		return inflight.err
 	}
 
 	inflight = f.getInflightFetch()
-	inflight.waitLoad.Add(1)
+	inflight.waitLoad = make(chan struct{})
 	f.inflightFetches[fetchID] = inflight
 	f.inflightFetchMu.Unlock()
 
 	err = f.handleFetch(ctx, fetch, preparedInput, &inflight.bufPair)
 	inflight.err = err
 	f.writeSingleFlightResult(&inflight.bufPair, responseBuf)
-	inflight.waitLoad.Done()
+	close(inflight.waitLoad)
 
 	f.inflightFetchMu.Lock()
 	delete(f.inflightFetches, fetchID)
