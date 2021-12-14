@@ -1,8 +1,30 @@
 package resolve
 
 import (
+	"sync"
+
 	"github.com/jensneuse/graphql-go-tools/pkg/fastbuffer"
 )
+
+var bufPairPool = sync.Pool{
+	New: func() interface{} {
+		pair := BufPair{
+			Data:   fastbuffer.New(),
+			Errors: fastbuffer.New(),
+		}
+		return &pair
+	},
+}
+
+func GetBufPair() *BufPair {
+	return bufPairPool.Get().(*BufPair)
+}
+
+func FreeBufPair(pair *BufPair) {
+	pair.Data.Reset()
+	pair.Errors.Reset()
+	bufPairPool.Put(pair)
+}
 
 type BufPair struct {
 	Data   *fastbuffer.FastBuffer
