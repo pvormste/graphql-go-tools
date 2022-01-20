@@ -472,6 +472,10 @@ func TestSchema_GetAllNestedFieldChildrenFromTypeField(t *testing.T) {
 		typeFields := schema.GetAllNestedFieldChildrenFromTypeField("Query", "withChildren")
 		expectedTypeFields := []TypeFields{
 			{
+				TypeName:   "IDType",
+				FieldNames: []string{"id"},
+			},
+			{
 				TypeName:   "WithChildren",
 				FieldNames: []string{"id", "name", "nested"},
 			},
@@ -498,6 +502,10 @@ func TestSchema_GetAllNestedFieldChildrenFromTypeField(t *testing.T) {
 		typeFields := schema.GetAllNestedFieldChildrenFromTypeField("Query", "withChildren", NewIsDataSourceConfigV2RootFieldSkipFunc(dataSources))
 		expectedTypeFields := []TypeFields{
 			{
+				TypeName:   "IDType",
+				FieldNames: []string{"id"},
+			},
+			{
 				TypeName:   "WithChildren",
 				FieldNames: []string{"id", "name"},
 			},
@@ -512,6 +520,14 @@ func TestSchema_GetAllNestedFieldChildrenFromTypeField(t *testing.T) {
 
 		typeFields := schema.GetAllNestedFieldChildrenFromTypeField("Query", "countries")
 		expectedTypeFields := []TypeFields{
+			{
+				TypeName:   "CodeType",
+				FieldNames: []string{"code"},
+			},
+			{
+				TypeName:   "CodeNameType",
+				FieldNames: []string{"code", "name"},
+			},
 			{
 				TypeName:   "Country",
 				FieldNames: []string{"code", "name", "native", "phone", "continent", "capital", "currency", "languages", "emoji", "emojiU", "states"},
@@ -548,13 +564,17 @@ extend type Query {
 	multiArgLevel1(lvl: int, number: int): MultiArgLevel1
 }
 
-type WithChildren { 
+interface IDType {
+	id: ID!
+}
+
+type WithChildren implements IDType { 
 	id: ID!
 	name: String
 	nested: Nested
-} 
+}
 
-type Nested { 
+type Nested implements IDType { 
 	id: ID! 
 	name: String! 
 } 
@@ -573,12 +593,21 @@ schema {
 	query: Query
 }
 
+interface CodeType {
+	code: ID!
+}
+
+interface CodeNameType implements CodeType {
+	code: ID!
+	name: String!
+}
+
 enum CacheControlScope {
   PUBLIC
   PRIVATE
 }
 
-type Continent {
+type Continent implements CodeNameType & CodeType {
   code: ID!
   name: String!
   countries: [Country!]!
@@ -588,7 +617,7 @@ input ContinentFilterInput {
   code: StringQueryOperatorInput
 }
 
-type Country {
+type Country implements CodeNameType & CodeType {
   code: ID!
   name: String!
   native: String!
