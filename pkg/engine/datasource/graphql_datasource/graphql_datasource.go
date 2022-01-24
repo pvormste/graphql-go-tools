@@ -85,6 +85,7 @@ func (p *Planner) Register(visitor *plan.Visitor, config json.RawMessage, isNest
 	p.visitor.Walker.RegisterOperationDefinitionVisitor(p)
 	p.visitor.Walker.RegisterSelectionSetVisitor(p)
 	p.visitor.Walker.RegisterEnterArgumentVisitor(p)
+	p.visitor.Walker.RegisterInlineFragmentVisitor(p)
 
 	err := json.Unmarshal(config, &p.config)
 	if err != nil {
@@ -175,6 +176,44 @@ func (p *Planner) EnterSelectionSet(ref int) {
 }
 
 func (p *Planner) LeaveSelectionSet(ref int) {
+	p.nodes = p.nodes[:len(p.nodes)-1]
+}
+
+func (p *Planner) EnterInlineFragment(ref int) {
+	typeCondition := p.visitor.Operation.InlineFragmentTypeConditionName(ref)
+	if typeCondition == nil {
+		return
+	}
+
+	inlineFragment := p.upstreamOperation.AddInlineFragment(ast.InlineFragment{
+		TypeCondition: ast.TypeCondition{
+			Type: p.upstreamOperation.AddNamedType(typeCondition),
+		},
+	})
+
+	selection := ast.Selection{
+		Kind: ast.SelectionKindInlineFragment,
+		Ref:  inlineFragment,
+	}
+
+	// add __typename field to selection set which contains typeCondition
+	// so that the resolver can distinguish between the response types
+	typeNameField := p.upstreamOperation.AddField(ast.Field{
+		Name: p.upstreamOperation.Input.AppendInputBytes([]byte("__typename")),
+	})
+	p.upstreamOperation.AddSelection(p.nodes[len(p.nodes)-1].Ref, ast.Selection{
+		Kind: ast.SelectionKindField,
+		Ref:  typeNameField.Ref,
+	})
+
+	p.upstreamOperation.AddSelection(p.nodes[len(p.nodes)-1].Ref, selection)
+	p.nodes = append(p.nodes, ast.Node{Kind: ast.NodeKindInlineFragment, Ref: inlineFragment})
+}
+
+func (p *Planner) LeaveInlineFragment(ref int) {
+	if p.nodes[len(p.nodes)-1].Kind != ast.NodeKindInlineFragment {
+		return
+	}
 	p.nodes = p.nodes[:len(p.nodes)-1]
 }
 

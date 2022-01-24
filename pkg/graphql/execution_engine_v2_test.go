@@ -91,17 +91,31 @@ func TestEngineResponseWriter_AsHTTPResponse(t *testing.T) {
 }
 
 type ExecutionEngineV2TestCase struct {
-	schema           *Schema
-	operation        func(t *testing.T) Request
-	dataSources      []plan.DataSourceConfiguration
-	fields           plan.FieldConfigurations
-	expectedResponse string
+	schema                            *Schema
+	operation                         func(t *testing.T) Request
+	dataSources                       []plan.DataSourceConfiguration
+	generateChildrenForFirstRootField bool
+	fields                            plan.FieldConfigurations
+	engineOptions                     []ExecutionOptionsV2
+	expectedResponse                  string
 }
 
 func TestExecutionEngineV2_Execute(t *testing.T) {
 	run := func(testCase ExecutionEngineV2TestCase, withError bool) func(t *testing.T) {
 		return func(t *testing.T) {
 			engineConf := NewEngineV2Configuration(testCase.schema)
+			if testCase.generateChildrenForFirstRootField {
+				for i := 0; i < len(testCase.dataSources); i++ {
+					children := testCase.schema.GetAllNestedFieldChildrenFromTypeField(testCase.dataSources[i].RootNodes[0].TypeName, testCase.dataSources[i].RootNodes[0].FieldNames[0])
+					testCase.dataSources[i].ChildNodes = make([]plan.TypeField, len(children))
+					for j, child := range children {
+						testCase.dataSources[i].ChildNodes[j] = plan.TypeField{
+							TypeName:   child.TypeName,
+							FieldNames: child.FieldNames,
+						}
+					}
+				}
+			}
 			engineConf.SetDataSources(testCase.dataSources)
 			engineConf.SetFieldConfigurations(testCase.fields)
 
@@ -348,6 +362,44 @@ func TestExecutionEngineV2_Execute(t *testing.T) {
 			},
 			fields:           []plan.FieldConfiguration{},
 			expectedResponse: `{"data":{"droid":{"name":"R2D2"}}}`,
+		},
+	))
+
+	t.Run("execute query with data source on field with interface return type", runWithoutError(
+		ExecutionEngineV2TestCase{
+			schema: createCountriesSchema(t),
+			operation: func(t *testing.T) Request {
+				return Request{
+					OperationName: "",
+					Variables:     nil,
+					Query:         `{ codeType { code ...on Country { name } } }`,
+				}
+			},
+			generateChildrenForFirstRootField: true,
+			dataSources: []plan.DataSourceConfiguration{
+				{
+					RootNodes: []plan.TypeField{
+						{TypeName: "Query", FieldNames: []string{"codeType"}},
+					},
+					Factory: &graphql_datasource.Factory{
+						Client: testNetHttpClient(t, roundTripperTestCase{
+							expectedHost:     "example.com",
+							expectedPath:     "/",
+							expectedBody:     `{"query":"{codeType {code __typename ... on Country {name}}}"}`,
+							sendResponseBody: `{"data":{"codeType":{"__typename":"Country","code":"de","name":"Germany"}}}`,
+							sendStatusCode:   200,
+						}),
+					},
+					Custom: graphql_datasource.ConfigJson(graphql_datasource.Configuration{
+						Fetch: graphql_datasource.FetchConfiguration{
+							URL:    "https://example.com/",
+							Method: "GET",
+						},
+					}),
+				},
+			},
+			fields:           []plan.FieldConfiguration{},
+			expectedResponse: `{"data":{"codeType":{"code":"de","name":"Germany"}}}`,
 		},
 	))
 
@@ -660,4 +712,10 @@ func BenchmarkExecutionEngineV2(b *testing.B) {
 		}
 	})
 
+}
+
+func createCountriesSchema(t *testing.T) *Schema {
+	schema, err := NewSchemaFromString(countriesSchema)
+	require.NoError(t, err)
+	return schema
 }
