@@ -2157,7 +2157,7 @@ func TestExecutionValidation(t *testing.T) {
 							fragment invalidArgName on Dog {
 								doesKnowCommand(command: CLEAN_UP_HOUSE)
 							}`,
-					ValidArguments(), Invalid)
+					KnownArguments(), Invalid)
 			})
 			t.Run("119", func(t *testing.T) {
 				run(t, ` 	{
@@ -2166,7 +2166,7 @@ func TestExecutionValidation(t *testing.T) {
 									fragment invalidArgName on Dog {
 										isHousetrained(atOtherHomes: true) @include(unless: false)
 									}`,
-					ValidArguments(), Invalid)
+					KnownArguments(), Invalid)
 			})
 			t.Run("121 args in reversed order", func(t *testing.T) {
 				run(t, `	fragment multipleArgs on ValidArguments {
@@ -2183,7 +2183,7 @@ func TestExecutionValidation(t *testing.T) {
 									name
 								}
 							}`,
-					ValidArguments(), Invalid)
+					KnownArguments(), Invalid)
 			})
 		})
 		t.Run("5.4.2 Argument Uniqueness", func(t *testing.T) {
