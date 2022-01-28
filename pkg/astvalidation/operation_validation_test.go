@@ -3000,7 +3000,7 @@ func TestExecutionValidation(t *testing.T) {
 						}
 						`, Values(), Valid)
 			})
-			t.Run("complex nested 'notList' is not list of Strings", func(t *testing.T) {
+			t.Run("complex nested 'notList' is not list of Strings should be ok with coersion", func(t *testing.T) {
 				run(t, `
 						{
 							nested(input: {
@@ -3009,7 +3009,7 @@ func TestExecutionValidation(t *testing.T) {
 								requiredListOfRequiredStrings: ["str"]
 							})
 						}
-						`, Values(), Invalid)
+						`, Values(), Valid)
 			})
 			t.Run("complex nested ok 3", func(t *testing.T) {
 				run(t, `
