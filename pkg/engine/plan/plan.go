@@ -649,8 +649,25 @@ func (v *Visitor) resolveInputTemplates(config objectFetchConfiguration, input *
 			if !v.Operation.OperationDefinitionHasVariableDefinition(v.operationDefinition, variableValue) {
 				break // omit optional argument when variable is not defined
 			}
+			variableDefinition, exists := v.Operation.VariableDefinitionByNameAndOperation(v.operationDefinition, v.Operation.VariableValueNameBytes(value.Ref))
+			if !exists {
+				break
+			}
+			typeName := v.Operation.ResolveTypeNameBytes(v.Operation.VariableDefinitions[variableDefinition].Type)
+			node, exists := v.Definition.Index.FirstNodeByNameBytes(typeName)
+			if !exists {
+				break
+			}
+			var variablePath []string
+			switch node.Kind {
+			case ast.NodeKindInputObjectTypeDefinition:
+				variablePath = append(variablePath, path...)
+			default:
+				variablePath = append(variablePath, variableValue)
+			}
+
 			variableName, _ = variables.AddVariable(&resolve.ContextVariable{
-				Path: []string{variableValue},
+				Path: variablePath,
 			}, false)
 		case "request":
 			if len(path) != 2 {
