@@ -44,7 +44,7 @@ func createTestRoundTripper(t *testing.T, testCase roundTripperTestCase) testRou
 				receivedBodyBytes, err = ioutil.ReadAll(req.Body)
 				require.NoError(t, err)
 			}
-			require.Equal(t, testCase.expectedBody, string(receivedBodyBytes))
+			require.Equal(t, testCase.expectedBody, string(receivedBodyBytes), "roundTripperTestCase body do not match")
 		}
 
 		body := bytes.NewBuffer([]byte(testCase.sendResponseBody))
@@ -271,6 +271,51 @@ func TestExecutionEngine_ExecuteWithOptions(t *testing.T) {
 		}),
 		expectedResponse: `{"data":{"hero":"Human"}}`,
 	}))
+
+	t.Run("execute query and apply input coercion for lists", runWithoutError(testCase{
+		schema: inputCoercionForListSchema(t),
+		request: func(t *testing.T) Request {
+			return Request{
+				OperationName: "charactersByIds",
+				Variables: stringify(map[string]interface{}{
+					"ids": 1,
+				}),
+				Query: `query($ids: [Int]) {charactersByIds(ids: $ids) { name }}`,
+			}
+		},
+		plannerConfig: inputCoercionHttpJsonDataSource,
+		roundTripper: createTestRoundTripper(t, roundTripperTestCase{
+			expectedHost:     "example.com",
+			expectedPath:     "/",
+			expectedBody:     `{ "ids": [1] }`,
+			sendResponseBody: `{"charactersByIds":[{"name": "Luke"}]}`,
+			sendStatusCode:   200,
+		}),
+		preExecutionTasks: normalizeAndValidatePreExecutionTasks,
+		expectedResponse:  `{"data":{"charactersByIds":[{"name":"Luke"}]}}`,
+	}))
+
+	t.Run("execute query and apply input coercion for lists with inline integer value", runWithoutError(testCase{
+		schema: inputCoercionForListSchema(t),
+		request: func(t *testing.T) Request {
+			return Request{
+				OperationName: "charactersByIds",
+				Variables:     stringify(map[string]interface{}{"ids": 1}),
+				// the library would fail to parse the query without input coercion.
+				Query: `query($ids: [Int]) {charactersByIds(ids: $ids) { name }}`,
+			}
+		},
+		plannerConfig: inputCoercionHttpJsonDataSource,
+		roundTripper: createTestRoundTripper(t, roundTripperTestCase{
+			expectedHost:     "example.com",
+			expectedPath:     "/",
+			expectedBody:     `{ "ids": [1] }`,
+			sendResponseBody: `{"charactersByIds":[{"name": "Luke"}]}`,
+			sendStatusCode:   200,
+		}),
+		preExecutionTasks: normalizeAndValidatePreExecutionTasks,
+		expectedResponse:  `{"data":{"charactersByIds":[{"name":"Luke"}]}}`,
+	}))
 }
 
 func normalizeAndValidatePreExecutionTasks(t *testing.T, request Request, schema *Schema, engine *ExecutionEngine) {
@@ -321,6 +366,8 @@ func heroWithArgumentSchema(t *testing.T) *Schema {
 	schemaString := `
 		type Query {
 			hero(name: String): String
+			heroDefault(name: String = "Any"): String
+			heroDefaultRequired(name: String! = "AnyRequired"): String
 			heroes(names: [String!]!): [String!]
 		}`
 
@@ -522,6 +569,37 @@ var movieHttpJsonDataSource = datasource.PlannerConfiguration{
 	},
 }
 
+var inputCoercionHttpJsonDataSource = datasource.PlannerConfiguration{
+	TypeFieldConfigurations: []datasource.TypeFieldConfiguration{
+		{
+			TypeName:  "Query",
+			FieldName: "charactersByIds",
+			Mapping: &datasource.MappingConfiguration{
+				Disabled: false,
+				Path:     "charactersByIds",
+			},
+			DataSource: datasource.SourceConfig{
+				Name: "HttpJsonDataSource",
+				Config: func() []byte {
+					data, _ := json.Marshal(datasource.HttpJsonDataSourceConfig{
+						URL: "example.com/",
+						Method: func() *string {
+							method := "GET"
+							return &method
+						}(),
+						Body: stringPtr(`{ "ids": {{ .arguments.ids }} }`),
+						DefaultTypeName: func() *string {
+							typeName := "Character"
+							return &typeName
+						}(),
+					})
+					return data
+				}(),
+			},
+		},
+	},
+}
+
 var heroWithArgumentHttpJsonDataSource = datasource.PlannerConfiguration{
 	TypeFieldConfigurations: []datasource.TypeFieldConfiguration{
 		{
@@ -603,15 +681,4 @@ var droidGraphqlDataSource = datasource.PlannerConfiguration{
 			},
 		},
 	},
-}
-
-func loadStarWarsQuery(starwarsFile string, variables starwars.QueryVariables) func(t *testing.T) Request {
-	return func(t *testing.T) Request {
-		query := starwars.LoadQuery(t, starwarsFile, variables)
-		request := Request{}
-		err := UnmarshalRequest(bytes.NewBuffer(query), &request)
-		require.NoError(t, err)
-
-		return request
-	}
 }

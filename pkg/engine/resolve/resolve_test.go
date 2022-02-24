@@ -244,6 +244,642 @@ func TestResolver_ResolveNode(t *testing.T) {
 			},
 		}, Context{Context: context.Background()}, `{"data":{"user":{"id":"1","name":"Jens","registered":true,"pet":{"name":"Barky","kind":"Dog"}}}}`
 	}))
+	t.Run("skip single field should resolve to empty response", testFn(false, false, func(t *testing.T, ctrl *gomock.Controller) (node Node, ctx Context, expectedOutput string) {
+		return &Object{
+			Fields: []*Field{
+				{
+					Name: []byte("data"),
+					Value: &Object{
+						Fields: []*Field{
+							{
+								Name: []byte("user"),
+								Value: &Object{
+									Fetch: &SingleFetch{
+										BufferId:   0,
+										DataSource: FakeDataSource(`{"id":"1","name":"Jens","registered":true,"pet":{"name":"Barky","kind":"Dog"}}`),
+									},
+									Fields: []*Field{
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("id"),
+											Value: &String{
+												Path: []string{"id"},
+											},
+											SkipDirectiveDefined: true,
+											SkipVariableName:     "skip",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}, Context{Context: context.Background(), Variables: []byte(`{"skip":true}`)}, `{"data":{"user":{}}}`
+	}))
+	t.Run("skip multiple fields should resolve to empty response", testFn(false, false, func(t *testing.T, ctrl *gomock.Controller) (node Node, ctx Context, expectedOutput string) {
+		return &Object{
+			Fields: []*Field{
+				{
+					Name: []byte("data"),
+					Value: &Object{
+						Fields: []*Field{
+							{
+								Name: []byte("user"),
+								Value: &Object{
+									Fetch: &SingleFetch{
+										BufferId:   0,
+										DataSource: FakeDataSource(`{"id":"1","name":"Jens","registered":true,"pet":{"name":"Barky","kind":"Dog"}}`),
+									},
+									Fields: []*Field{
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("id"),
+											Value: &String{
+												Path: []string{"id"},
+											},
+											SkipDirectiveDefined: true,
+											SkipVariableName:     "skip",
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("name"),
+											Value: &String{
+												Path: []string{"name"},
+											},
+											SkipDirectiveDefined: true,
+											SkipVariableName:     "skip",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}, Context{Context: context.Background(), Variables: []byte(`{"skip":true}`)}, `{"data":{"user":{}}}`
+	}))
+	t.Run("skip __typename field be possible", testFn(false, false, func(t *testing.T, ctrl *gomock.Controller) (node Node, ctx Context, expectedOutput string) {
+		return &Object{
+			Fields: []*Field{
+				{
+					Name: []byte("data"),
+					Value: &Object{
+						Fields: []*Field{
+							{
+								Name: []byte("user"),
+								Value: &Object{
+									Fetch: &SingleFetch{
+										BufferId:   0,
+										DataSource: FakeDataSource(`{"id":"1","name":"Jens","registered":true,"pet":{"name":"Barky","kind":"Dog"}}`),
+									},
+									Fields: []*Field{
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("id"),
+											Value: &String{
+												Path: []string{"id"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("__typename"),
+											Value: &String{
+												Path: []string{"__typename"},
+											},
+											SkipDirectiveDefined: true,
+											SkipVariableName:     "skip",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}, Context{Context: context.Background(), Variables: []byte(`{"skip":true}`)}, `{"data":{"user":{"id":"1"}}}`
+	}))
+	t.Run("include __typename field be possible", testFn(false, false, func(t *testing.T, ctrl *gomock.Controller) (node Node, ctx Context, expectedOutput string) {
+		return &Object{
+			Fields: []*Field{
+				{
+					Name: []byte("data"),
+					Value: &Object{
+						Fields: []*Field{
+							{
+								Name: []byte("user"),
+								Value: &Object{
+									Fetch: &SingleFetch{
+										BufferId:   0,
+										DataSource: FakeDataSource(`{"id":"1","name":"Jens","registered":true,"pet":{"name":"Barky","kind":"Dog"},"__typename":"User"}`),
+									},
+									Fields: []*Field{
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("id"),
+											Value: &String{
+												Path: []string{"id"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("__typename"),
+											Value: &String{
+												Path: []string{"__typename"},
+											},
+											IncludeDirectiveDefined: true,
+											IncludeVariableName:     "include",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}, Context{Context: context.Background(), Variables: []byte(`{"include":true}`)}, `{"data":{"user":{"id":"1","__typename":"User"}}}`
+	}))
+	t.Run("include __typename field with false value", testFn(false, false, func(t *testing.T, ctrl *gomock.Controller) (node Node, ctx Context, expectedOutput string) {
+		return &Object{
+			Fields: []*Field{
+				{
+					Name: []byte("data"),
+					Value: &Object{
+						Fields: []*Field{
+							{
+								Name: []byte("user"),
+								Value: &Object{
+									Fetch: &SingleFetch{
+										BufferId:   0,
+										DataSource: FakeDataSource(`{"id":"1","name":"Jens","registered":true,"pet":{"name":"Barky","kind":"Dog"},"__typename":"User"}`),
+									},
+									Fields: []*Field{
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("id"),
+											Value: &String{
+												Path: []string{"id"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("__typename"),
+											Value: &String{
+												Path: []string{"__typename"},
+											},
+											IncludeDirectiveDefined: true,
+											IncludeVariableName:     "include",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}, Context{Context: context.Background(), Variables: []byte(`{"include":false}`)}, `{"data":{"user":{"id":"1"}}}`
+	}))
+	t.Run("skip field when skip variable is true", testFn(false, false, func(t *testing.T, ctrl *gomock.Controller) (node Node, ctx Context, expectedOutput string) {
+		return &Object{
+			Fields: []*Field{
+				{
+					Name: []byte("data"),
+					Value: &Object{
+						Fields: []*Field{
+							{
+								Name: []byte("user"),
+								Value: &Object{
+									Fetch: &SingleFetch{
+										BufferId:   0,
+										DataSource: FakeDataSource(`{"id":"1","name":"Jens","registered":true,"pet":{"name":"Barky","kind":"Dog"}}`),
+									},
+									Fields: []*Field{
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("id"),
+											Value: &String{
+												Path: []string{"id"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("name"),
+											Value: &String{
+												Path: []string{"name"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("registered"),
+											Value: &Boolean{
+												Path: []string{"registered"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("pet"),
+											Value: &Object{
+												Path: []string{"pet"},
+												Fields: []*Field{
+													{
+														Name: []byte("name"),
+														Value: &String{
+															Path: []string{"name"},
+														},
+													},
+													{
+														Name: []byte("kind"),
+														Value: &String{
+															Path: []string{"kind"},
+														},
+														SkipDirectiveDefined: true,
+														SkipVariableName:     "skip",
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}, Context{Context: context.Background(), Variables: []byte(`{"skip":true}`)}, `{"data":{"user":{"id":"1","name":"Jens","registered":true,"pet":{"name":"Barky"}}}}`
+	}))
+	t.Run("don't skip field when skip variable is false", testFn(false, false, func(t *testing.T, ctrl *gomock.Controller) (node Node, ctx Context, expectedOutput string) {
+		return &Object{
+			Fields: []*Field{
+				{
+					Name: []byte("data"),
+					Value: &Object{
+						Fields: []*Field{
+							{
+								Name: []byte("user"),
+								Value: &Object{
+									Fetch: &SingleFetch{
+										BufferId:   0,
+										DataSource: FakeDataSource(`{"id":"1","name":"Jens","registered":true,"pet":{"name":"Barky","kind":"Dog"}}`),
+									},
+									Fields: []*Field{
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("id"),
+											Value: &String{
+												Path: []string{"id"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("name"),
+											Value: &String{
+												Path: []string{"name"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("registered"),
+											Value: &Boolean{
+												Path: []string{"registered"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("pet"),
+											Value: &Object{
+												Path: []string{"pet"},
+												Fields: []*Field{
+													{
+														Name: []byte("name"),
+														Value: &String{
+															Path: []string{"name"},
+														},
+													},
+													{
+														Name: []byte("kind"),
+														Value: &String{
+															Path: []string{"kind"},
+														},
+														SkipDirectiveDefined: true,
+														SkipVariableName:     "skip",
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}, Context{Context: context.Background(), Variables: []byte(`{"skip":false}`)}, `{"data":{"user":{"id":"1","name":"Jens","registered":true,"pet":{"name":"Barky","kind":"Dog"}}}}`
+	}))
+	t.Run("don't skip field when skip variable is missing", testFn(false, false, func(t *testing.T, ctrl *gomock.Controller) (node Node, ctx Context, expectedOutput string) {
+		return &Object{
+			Fields: []*Field{
+				{
+					Name: []byte("data"),
+					Value: &Object{
+						Fields: []*Field{
+							{
+								Name: []byte("user"),
+								Value: &Object{
+									Fetch: &SingleFetch{
+										BufferId:   0,
+										DataSource: FakeDataSource(`{"id":"1","name":"Jens","registered":true,"pet":{"name":"Barky","kind":"Dog"}}`),
+									},
+									Fields: []*Field{
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("id"),
+											Value: &String{
+												Path: []string{"id"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("name"),
+											Value: &String{
+												Path: []string{"name"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("registered"),
+											Value: &Boolean{
+												Path: []string{"registered"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("pet"),
+											Value: &Object{
+												Path: []string{"pet"},
+												Fields: []*Field{
+													{
+														Name: []byte("name"),
+														Value: &String{
+															Path: []string{"name"},
+														},
+													},
+													{
+														Name: []byte("kind"),
+														Value: &String{
+															Path: []string{"kind"},
+														},
+														SkipDirectiveDefined: true,
+														SkipVariableName:     "skip",
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}, Context{Context: context.Background(), Variables: []byte(`{}`)}, `{"data":{"user":{"id":"1","name":"Jens","registered":true,"pet":{"name":"Barky","kind":"Dog"}}}}`
+	}))
+	t.Run("include field when include variable is true", testFn(false, false, func(t *testing.T, ctrl *gomock.Controller) (node Node, ctx Context, expectedOutput string) {
+		return &Object{
+			Fields: []*Field{
+				{
+					Name: []byte("data"),
+					Value: &Object{
+						Fields: []*Field{
+							{
+								Name: []byte("user"),
+								Value: &Object{
+									Fetch: &SingleFetch{
+										BufferId:   0,
+										DataSource: FakeDataSource(`{"id":"1","name":"Jens","registered":true,"pet":{"name":"Barky","kind":"Dog"}}`),
+									},
+									Fields: []*Field{
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("id"),
+											Value: &String{
+												Path: []string{"id"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("name"),
+											Value: &String{
+												Path: []string{"name"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("registered"),
+											Value: &Boolean{
+												Path: []string{"registered"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("pet"),
+											Value: &Object{
+												Path: []string{"pet"},
+												Fields: []*Field{
+													{
+														Name: []byte("name"),
+														Value: &String{
+															Path: []string{"name"},
+														},
+													},
+													{
+														Name: []byte("kind"),
+														Value: &String{
+															Path: []string{"kind"},
+														},
+														IncludeDirectiveDefined: true,
+														IncludeVariableName:     "include",
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}, Context{Context: context.Background(), Variables: []byte(`{"include":true}`)}, `{"data":{"user":{"id":"1","name":"Jens","registered":true,"pet":{"name":"Barky","kind":"Dog"}}}}`
+	}))
+	t.Run("exclude field when include variable is false", testFn(false, false, func(t *testing.T, ctrl *gomock.Controller) (node Node, ctx Context, expectedOutput string) {
+		return &Object{
+			Fields: []*Field{
+				{
+					Name: []byte("data"),
+					Value: &Object{
+						Fields: []*Field{
+							{
+								Name: []byte("user"),
+								Value: &Object{
+									Fetch: &SingleFetch{
+										BufferId:   0,
+										DataSource: FakeDataSource(`{"id":"1","name":"Jens","registered":true,"pet":{"name":"Barky","kind":"Dog"}}`),
+									},
+									Fields: []*Field{
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("id"),
+											Value: &String{
+												Path: []string{"id"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("name"),
+											Value: &String{
+												Path: []string{"name"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("registered"),
+											Value: &Boolean{
+												Path: []string{"registered"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("pet"),
+											Value: &Object{
+												Path: []string{"pet"},
+												Fields: []*Field{
+													{
+														Name: []byte("name"),
+														Value: &String{
+															Path: []string{"name"},
+														},
+													},
+													{
+														Name: []byte("kind"),
+														Value: &String{
+															Path: []string{"kind"},
+														},
+														IncludeDirectiveDefined: true,
+														IncludeVariableName:     "include",
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}, Context{Context: context.Background(), Variables: []byte(`{"include":false}`)}, `{"data":{"user":{"id":"1","name":"Jens","registered":true,"pet":{"name":"Barky"}}}}`
+	}))
+	t.Run("exclude field when include variable is missing", testFn(false, false, func(t *testing.T, ctrl *gomock.Controller) (node Node, ctx Context, expectedOutput string) {
+		return &Object{
+			Fields: []*Field{
+				{
+					Name: []byte("data"),
+					Value: &Object{
+						Fields: []*Field{
+							{
+								Name: []byte("user"),
+								Value: &Object{
+									Fetch: &SingleFetch{
+										BufferId:   0,
+										DataSource: FakeDataSource(`{"id":"1","name":"Jens","registered":true,"pet":{"name":"Barky","kind":"Dog"}}`),
+									},
+									Fields: []*Field{
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("id"),
+											Value: &String{
+												Path: []string{"id"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("name"),
+											Value: &String{
+												Path: []string{"name"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("registered"),
+											Value: &Boolean{
+												Path: []string{"registered"},
+											},
+										},
+										{
+											BufferID:  0,
+											HasBuffer: true,
+											Name:      []byte("pet"),
+											Value: &Object{
+												Path: []string{"pet"},
+												Fields: []*Field{
+													{
+														Name: []byte("name"),
+														Value: &String{
+															Path: []string{"name"},
+														},
+													},
+													{
+														Name: []byte("kind"),
+														Value: &String{
+															Path: []string{"kind"},
+														},
+														IncludeDirectiveDefined: true,
+														IncludeVariableName:     "include",
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}, Context{Context: context.Background(), Variables: []byte(`{}`)}, `{"data":{"user":{"id":"1","name":"Jens","registered":true,"pet":{"name":"Barky"}}}}`
+	}))
 	t.Run("fetch with context variable resolver", testFn(true, false, func(t *testing.T, ctrl *gomock.Controller) (node Node, ctx Context, expectedOutput string) {
 		mockDataSource := NewMockDataSource(ctrl)
 		mockDataSource.EXPECT().
@@ -266,9 +902,9 @@ func TestResolver_ResolveNode(t *testing.T) {
 						},
 						{
 							SegmentType:        VariableSegmentType,
-							VariableSource:     VariableSourceContext,
+							VariableKind:       ContextVariableKind,
 							VariableSourcePath: []string{"id"},
-							VariableValueType:  jsonparser.Number,
+							Renderer:           NewPlainVariableRendererWithValidation(`{"type":"number"}`),
 						},
 						{
 							SegmentType: StaticSegmentType,
@@ -750,11 +1386,10 @@ func TestResolver_ResolveNode(t *testing.T) {
 										Data:        []byte(`{"id":`),
 									},
 									{
-										SegmentType:                  VariableSegmentType,
-										VariableSource:               VariableSourceObject,
-										VariableSourcePath:           []string{"id"},
-										VariableValueType:            jsonparser.Number,
-										RenderVariableAsGraphQLValue: true,
+										SegmentType:        VariableSegmentType,
+										VariableKind:       ObjectVariableKind,
+										VariableSourcePath: []string{"id"},
+										Renderer:           NewGraphQLVariableRenderer(`{"type":"number"}`),
 									},
 									{
 										SegmentType: StaticSegmentType,
@@ -1067,7 +1702,7 @@ func TestResolver_ResolveGraphQLResponse(t *testing.T) {
 		}, Context{Context: context.Background()}, `{"errors":[{"message":"errorMessage1"},{"message":"errorMessage2"}],"data":{"name":null}}`
 	}))
 	t.Run("not nullable object in nullable field", testFn(false, false, func(t *testing.T, ctrl *gomock.Controller) (node *GraphQLResponse, ctx Context, expectedOutput string) {
-		return  &GraphQLResponse{
+		return &GraphQLResponse{
 			Data: &Object{
 				Nullable: false,
 				Fetch: &SingleFetch{
@@ -1081,13 +1716,13 @@ func TestResolver_ResolveGraphQLResponse(t *testing.T) {
 						Name:      []byte("nullableField"),
 						Value: &Object{
 							Nullable: true,
-							Path: []string{"nullable_field"},
+							Path:     []string{"nullable_field"},
 							Fields: []*Field{
 								{
 									Name: []byte("notNullableField"),
 									Value: &Object{
 										Nullable: false,
-										Path: []string{"not_nullable_field"},
+										Path:     []string{"not_nullable_field"},
 										Fields: []*Field{
 											{
 												Name: []byte("someField"),
@@ -1460,9 +2095,9 @@ func TestResolver_ResolveGraphQLResponse(t *testing.T) {
 									},
 									{
 										SegmentType:        VariableSegmentType,
-										VariableSource:     VariableSourceContext,
+										VariableKind:       ContextVariableKind,
 										VariableSourcePath: []string{"thirdArg"},
-										VariableValueType:  jsonparser.Number,
+										Renderer:           NewPlainVariableRendererWithValidation(`{"type":"number"}`),
 									},
 									{
 										SegmentType: StaticSegmentType,
@@ -1470,9 +2105,9 @@ func TestResolver_ResolveGraphQLResponse(t *testing.T) {
 									},
 									{
 										SegmentType:        VariableSegmentType,
-										VariableSource:     VariableSourceContext,
+										VariableKind:       ContextVariableKind,
 										VariableSourcePath: []string{"firstArg"},
-										VariableValueType:  jsonparser.String,
+										Renderer:           NewPlainVariableRendererWithValidation(`{"type":"string"}`),
 									},
 									{
 										SegmentType: StaticSegmentType,
@@ -1504,9 +2139,9 @@ func TestResolver_ResolveGraphQLResponse(t *testing.T) {
 									},
 									{
 										SegmentType:        VariableSegmentType,
-										VariableSource:     VariableSourceContext,
+										VariableKind:       ContextVariableKind,
 										VariableSourcePath: []string{"fourthArg"},
-										VariableValueType:  jsonparser.Number,
+										Renderer:           NewPlainVariableRendererWithValidation(`{"type":"number"}`),
 									},
 									{
 										SegmentType: StaticSegmentType,
@@ -1514,9 +2149,9 @@ func TestResolver_ResolveGraphQLResponse(t *testing.T) {
 									},
 									{
 										SegmentType:        VariableSegmentType,
-										VariableSource:     VariableSourceContext,
+										VariableKind:       ContextVariableKind,
 										VariableSourcePath: []string{"secondArg"},
-										VariableValueType:  jsonparser.Boolean,
+										Renderer:           NewPlainVariableRendererWithValidation(`{"type":"boolean"}`),
 									},
 									{
 										SegmentType: StaticSegmentType,
@@ -1741,11 +2376,10 @@ func TestResolver_ResolveGraphQLResponse(t *testing.T) {
 											SegmentType: StaticSegmentType,
 										},
 										{
-											SegmentType:                  VariableSegmentType,
-											VariableSource:               VariableSourceObject,
-											VariableSourcePath:           []string{"id"},
-											VariableValueType:            jsonparser.String,
-											RenderVariableAsGraphQLValue: true,
+											SegmentType:        VariableSegmentType,
+											VariableKind:       ObjectVariableKind,
+											VariableSourcePath: []string{"id"},
+											Renderer:           NewJSONVariableRendererWithValidation(`{"type":"string"}`),
 										},
 										{
 											Data:        []byte(`,"__typename":"User"}]}}}`),
@@ -1804,11 +2438,10 @@ func TestResolver_ResolveGraphQLResponse(t *testing.T) {
 																		SegmentType: StaticSegmentType,
 																	},
 																	{
-																		SegmentType:                  VariableSegmentType,
-																		VariableSource:               VariableSourceObject,
-																		VariableSourcePath:           []string{"upc"},
-																		VariableValueType:            jsonparser.String,
-																		RenderVariableAsGraphQLValue: true,
+																		SegmentType:        VariableSegmentType,
+																		VariableKind:       ObjectVariableKind,
+																		VariableSourcePath: []string{"upc"},
+																		Renderer:           NewJSONVariableRendererWithValidation(`{"type":"string"}`),
 																	},
 																	{
 																		Data:        []byte(`,"__typename":"Product"}]}}}`),
@@ -1938,18 +2571,17 @@ func TestResolver_ResolveGraphQLResponse(t *testing.T) {
 									InputTemplate: InputTemplate{
 										Segments: []TemplateSegment{
 											{
-												Data:        []byte(`{"method":"POST","url":"http://localhost:4002","body":{"query":"query($representations: [_Any!]!){_entities(representations: $representations){... on User {reviews {body product {upc __typename}}}}}","variables":{"representations":[{"id":"`),
+												Data:        []byte(`{"method":"POST","url":"http://localhost:4002","body":{"query":"query($representations: [_Any!]!){_entities(representations: $representations){... on User {reviews {body product {upc __typename}}}}}","variables":{"representations":[{"id":`),
 												SegmentType: StaticSegmentType,
 											},
 											{
-												SegmentType:                  VariableSegmentType,
-												VariableSource:               VariableSourceObject,
-												VariableSourcePath:           []string{"id"},
-												VariableValueType:            jsonparser.Number,
-												RenderVariableAsGraphQLValue: true,
+												SegmentType:        VariableSegmentType,
+												VariableKind:       ObjectVariableKind,
+												VariableSourcePath: []string{"id"},
+												Renderer:           NewJSONVariableRendererWithValidation(`{"type":"string"}`),
 											},
 											{
-												Data:        []byte(`","__typename":"User"}]}}}`),
+												Data:        []byte(`,"__typename":"User"}]}}}`),
 												SegmentType: StaticSegmentType,
 											},
 										},
@@ -2008,11 +2640,10 @@ func TestResolver_ResolveGraphQLResponse(t *testing.T) {
 																			SegmentType: StaticSegmentType,
 																		},
 																		{
-																			SegmentType:                  VariableSegmentType,
-																			VariableSource:               VariableSourceObject,
-																			VariableSourcePath:           []string{"upc"},
-																			VariableValueType:            jsonparser.String,
-																			RenderVariableAsGraphQLValue: true,
+																			SegmentType:        VariableSegmentType,
+																			VariableKind:       ObjectVariableKind,
+																			VariableSourcePath: []string{"upc"},
+																			Renderer:           NewJSONVariableRendererWithValidation(`{"type":"string"}`),
 																		},
 																		{
 																			Data:        []byte(`,"__typename":"Product"}]}}}`),
@@ -2142,18 +2773,17 @@ func TestResolver_ResolveGraphQLResponse(t *testing.T) {
 									InputTemplate: InputTemplate{
 										Segments: []TemplateSegment{
 											{
-												Data:        []byte(`{"method":"POST","url":"http://localhost:4002","body":{"query":"query($representations: [_Any!]!){_entities(representations: $representations){... on User {reviews {body product {upc __typename}}}}}","variables":{"representations":[{"id":"`),
+												Data:        []byte(`{"method":"POST","url":"http://localhost:4002","body":{"query":"query($representations: [_Any!]!){_entities(representations: $representations){... on User {reviews {body product {upc __typename}}}}}","variables":{"representations":[{"id":`),
 												SegmentType: StaticSegmentType,
 											},
 											{
-												SegmentType:                  VariableSegmentType,
-												VariableSource:               VariableSourceObject,
-												VariableSourcePath:           []string{"id"},
-												VariableValueType:            jsonparser.Number,
-												RenderVariableAsGraphQLValue: true,
+												SegmentType:        VariableSegmentType,
+												VariableKind:       ObjectVariableKind,
+												VariableSourcePath: []string{"id"},
+												Renderer:           NewPlainVariableRendererWithValidation(`{"type":"string"}`),
 											},
 											{
-												Data:        []byte(`","__typename":"User"}]}}}`),
+												Data:        []byte(`,"__typename":"User"}]}}}`),
 												SegmentType: StaticSegmentType,
 											},
 										},
@@ -2209,11 +2839,10 @@ func TestResolver_ResolveGraphQLResponse(t *testing.T) {
 																			SegmentType: StaticSegmentType,
 																		},
 																		{
-																			SegmentType:                  VariableSegmentType,
-																			VariableSource:               VariableSourceObject,
-																			VariableSourcePath:           []string{"upc"},
-																			VariableValueType:            jsonparser.String,
-																			RenderVariableAsGraphQLValue: true,
+																			SegmentType:        VariableSegmentType,
+																			VariableKind:       ObjectVariableKind,
+																			VariableSourcePath: []string{"upc"},
+																			Renderer:           NewPlainVariableRendererWithValidation(`{"type":"string"}`),
 																		},
 																		{
 																			Data:        []byte(`,"__typename":"Product"}]}}}`),
@@ -2304,7 +2933,7 @@ func TestResolver_WithHeader(t *testing.T) {
 							Segments: []TemplateSegment{
 								{
 									SegmentType:        VariableSegmentType,
-									VariableSource:     VariableSourceRequestHeader,
+									VariableKind:       HeaderVariableKind,
 									VariableSourcePath: []string{tc.variable},
 								},
 							},
@@ -2472,7 +3101,7 @@ func BenchmarkResolver_ResolveNode(b *testing.B) {
 								},
 								{
 									SegmentType:        VariableSegmentType,
-									VariableSource:     VariableSourceContext,
+									VariableKind:       ContextVariableKind,
 									VariableSourcePath: []string{"thirdArg"},
 								},
 								{
@@ -2481,7 +3110,7 @@ func BenchmarkResolver_ResolveNode(b *testing.B) {
 								},
 								{
 									SegmentType:        VariableSegmentType,
-									VariableSource:     VariableSourceContext,
+									VariableKind:       ContextVariableKind,
 									VariableSourcePath: []string{"firstArg"},
 								},
 								{
@@ -2511,7 +3140,7 @@ func BenchmarkResolver_ResolveNode(b *testing.B) {
 								},
 								{
 									SegmentType:        VariableSegmentType,
-									VariableSource:     VariableSourceContext,
+									VariableKind:       ContextVariableKind,
 									VariableSourcePath: []string{"fourthArg"},
 								},
 								{
@@ -2520,7 +3149,7 @@ func BenchmarkResolver_ResolveNode(b *testing.B) {
 								},
 								{
 									SegmentType:        VariableSegmentType,
-									VariableSource:     VariableSourceContext,
+									VariableKind:       ContextVariableKind,
 									VariableSourcePath: []string{"secondArg"},
 								},
 								{
@@ -2723,16 +3352,16 @@ func (h hookContextPathMatcher) String() string {
 }
 
 func TestInputTemplate_Render(t *testing.T) {
-	runTest := func(t *testing.T, variables string, sourcePath []string, valueType jsonparser.ValueType, expected string) {
+	runTest := func(t *testing.T, variables string, sourcePath []string, jsonSchema string, expectErr bool, expected string) {
 		t.Helper()
 
 		template := InputTemplate{
 			Segments: []TemplateSegment{
 				{
 					SegmentType:        VariableSegmentType,
-					VariableSource:     VariableSourceContext,
+					VariableKind:       ContextVariableKind,
 					VariableSourcePath: sourcePath,
-					VariableValueType:  valueType,
+					Renderer:           NewPlainVariableRendererWithValidation(jsonSchema),
 				},
 			},
 		}
@@ -2741,60 +3370,65 @@ func TestInputTemplate_Render(t *testing.T) {
 		}
 		buf := fastbuffer.New()
 		err := template.Render(ctx, nil, buf)
-		assert.NoError(t, err)
+		if expectErr {
+			assert.Error(t, err)
+		} else {
+			assert.NoError(t, err)
+		}
 		out := buf.String()
 		assert.Equal(t, expected, out)
 	}
 
 	t.Run("string scalar", func(t *testing.T) {
-		runTest(t, `{"foo":"bar"}`, []string{"foo"}, jsonparser.String, `"bar"`)
+		runTest(t, `{"foo":"bar"}`, []string{"foo"}, `{"type":"string"}`, false, `"bar"`)
 	})
 	t.Run("boolean scalar", func(t *testing.T) {
-		runTest(t, `{"foo":true}`, []string{"foo"}, jsonparser.Boolean, "true")
+		runTest(t, `{"foo":true}`, []string{"foo"}, `{"type":"boolean"}`, false, "true")
 	})
 	t.Run("json object pass through", func(t *testing.T) {
-		runTest(t, `{"foo":{"bar":"baz"}}`, []string{"foo"}, jsonparser.Object, `{"bar":"baz"}`)
+		runTest(t, `{"foo":{"bar":"baz"}}`, []string{"foo"}, `{"type":"object","properties":{"bar":{"type":"string"}}}`, false, `{"bar":"baz"}`)
 	})
 	t.Run("json object as graphql object", func(t *testing.T) {
-		runTest(t, `{"foo":{"bar":"baz"}}`, []string{"foo"}, jsonparser.Object, `{"bar":"baz"}`)
+		runTest(t, `{"foo":{"bar":"baz"}}`, []string{"foo"}, `{"type":"object","properties":{"bar":{"type":"string"}}}`, false, `{"bar":"baz"}`)
 	})
 	t.Run("json object as graphql object with null", func(t *testing.T) {
-		runTest(t, `{"foo":null}`, []string{"foo"}, jsonparser.String, `null`)
+		runTest(t, `{"foo":null}`, []string{"foo"}, `{"type":"string"}`, false, `null`)
 	})
 	t.Run("json object as graphql object with number", func(t *testing.T) {
-		runTest(t, `{"foo":123}`, []string{"foo"}, jsonparser.Number, `123`)
+		runTest(t, `{"foo":123}`, []string{"foo"}, `{"type":"integer"}`, false, `123`)
+	})
+	t.Run("json object as graphql object with invalid number", func(t *testing.T) {
+		runTest(t, `{"foo":123}`, []string{"foo"}, `{"type":"string"}`, true, "")
 	})
 	t.Run("json object as graphql object with boolean", func(t *testing.T) {
-		runTest(t, `{"foo":{"bar":true}}`, []string{"foo"}, jsonparser.Object, `{"bar":true}`)
+		runTest(t, `{"foo":{"bar":true}}`, []string{"foo"}, `{"type":"object","properties":{"bar":{"type":"boolean"}}}`, false, `{"bar":true}`)
 	})
 	t.Run("json object as graphql object with number", func(t *testing.T) {
-		runTest(t, `{"foo":{"bar":123}}`, []string{"foo"}, jsonparser.Object, `{"bar":123}`)
+		runTest(t, `{"foo":{"bar":123}}`, []string{"foo"}, `{"type":"object","properties":{"bar":{"type":"integer"}}}`, false, `{"bar":123}`)
 	})
 	t.Run("json object as graphql object with float", func(t *testing.T) {
-		runTest(t, `{"foo":{"bar":1.23}}`, []string{"foo"}, jsonparser.Object, `{"bar":1.23}`)
+		runTest(t, `{"foo":{"bar":1.23}}`, []string{"foo"}, `{"type":"object","properties":{"bar":{"type":"number"}}}`, false, `{"bar":1.23}`)
 	})
 	t.Run("json object as graphql object with nesting", func(t *testing.T) {
-		runTest(t, `{"foo":{"bar":{"baz":"bat"}}}`, []string{"foo"}, jsonparser.Object, `{"bar":{"baz":"bat"}}`)
+		runTest(t, `{"foo":{"bar":{"baz":"bat"}}}`, []string{"foo"}, `{"type":"object","properties":{"bar":{"type":"object","properties":{"baz":{"type":"string"}}}}}`, false, `{"bar":{"baz":"bat"}}`)
 	})
 	t.Run("json object as graphql object with single array", func(t *testing.T) {
-		runTest(t, `{"foo":["bar"]}`, []string{"foo"}, jsonparser.Array, `["bar"]`)
+		runTest(t, `{"foo":["bar"]}`, []string{"foo"}, `{"type":"array","item":{"type":"string"}}`, false, `["bar"]`)
 	})
 	t.Run("json object as graphql object with array", func(t *testing.T) {
-		runTest(t, `{"foo":["bar","baz"]}`, []string{"foo"}, jsonparser.Array, `["bar","baz"]`)
+		runTest(t, `{"foo":["bar","baz"]}`, []string{"foo"}, `{"type":"array","item":{"type":"string"}}`, false, `["bar","baz"]`)
 	})
 	t.Run("json object as graphql object with object array", func(t *testing.T) {
-		runTest(t, `{"foo":[{"bar":"baz"},{"bar":"bat"}]}`, []string{"foo"}, jsonparser.Array, `[{"bar":"baz"},{"bar":"bat"}]`)
+		runTest(t, `{"foo":[{"bar":"baz"},{"bar":"bat"}]}`, []string{"foo"}, `{"type":"array","item":{"type":"object","properties":{"bar":{"type":"string"}}}}`, false, `[{"bar":"baz"},{"bar":"bat"}]`)
 	})
 	t.Run("array with csv render string", func(t *testing.T) {
 		template := InputTemplate{
 			Segments: []TemplateSegment{
 				{
-					SegmentType:                 VariableSegmentType,
-					VariableSource:              VariableSourceContext,
-					VariableSourcePath:          []string{"a"},
-					VariableValueType:           jsonparser.Array,
-					VariableValueArrayValueType: jsonparser.String,
-					RenderVariableAsArrayCSV:    true,
+					SegmentType:        VariableSegmentType,
+					VariableKind:       ContextVariableKind,
+					VariableSourcePath: []string{"a"},
+					Renderer:           NewCSVVariableRenderer(JsonRootType{Value: jsonparser.String, Kind: JsonRootTypeKindSingle}),
 				},
 			},
 		}
@@ -2811,12 +3445,10 @@ func TestInputTemplate_Render(t *testing.T) {
 		template := InputTemplate{
 			Segments: []TemplateSegment{
 				{
-					SegmentType:                 VariableSegmentType,
-					VariableSource:              VariableSourceContext,
-					VariableSourcePath:          []string{"a"},
-					VariableValueType:           jsonparser.Array,
-					VariableValueArrayValueType: jsonparser.Number,
-					RenderVariableAsArrayCSV:    true,
+					SegmentType:        VariableSegmentType,
+					VariableKind:       ContextVariableKind,
+					VariableSourcePath: []string{"a"},
+					Renderer:           NewCSVVariableRenderer(JsonRootType{Value: jsonparser.Number}),
 				},
 			},
 		}
@@ -2833,11 +3465,10 @@ func TestInputTemplate_Render(t *testing.T) {
 		template := InputTemplate{
 			Segments: []TemplateSegment{
 				{
-					SegmentType:                 VariableSegmentType,
-					VariableSource:              VariableSourceContext,
-					VariableSourcePath:          []string{"a"},
-					VariableValueType:           jsonparser.Array,
-					VariableValueArrayValueType: jsonparser.Number,
+					SegmentType:        VariableSegmentType,
+					VariableKind:       ContextVariableKind,
+					VariableSourcePath: []string{"a"},
+					Renderer:           NewGraphQLVariableRenderer(`{"type":"array","items":{"type":"number"}}`),
 				},
 			},
 		}
@@ -2849,5 +3480,33 @@ func TestInputTemplate_Render(t *testing.T) {
 		assert.NoError(t, err)
 		out := buf.String()
 		assert.Equal(t, "[1,2,3]", out)
+	})
+	t.Run("json render with value missing", func(t *testing.T) {
+		template := InputTemplate{
+			Segments: []TemplateSegment{
+				{
+					SegmentType: StaticSegmentType,
+					Data:        []byte(`{"key":`),
+				},
+				{
+					SegmentType:        VariableSegmentType,
+					VariableKind:       ContextVariableKind,
+					VariableSourcePath: []string{"a"},
+					Renderer:           NewJSONVariableRendererWithValidation(`{"type":"string"}`),
+				},
+				{
+					SegmentType: StaticSegmentType,
+					Data:        []byte(`}`),
+				},
+			},
+		}
+		ctx := &Context{
+			Variables: []byte(""),
+		}
+		buf := fastbuffer.New()
+		err := template.Render(ctx, nil, buf)
+		assert.NoError(t, err)
+		out := buf.String()
+		assert.Equal(t, `{"key":null}`, out)
 	})
 }

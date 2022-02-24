@@ -33,6 +33,31 @@ func ErrTypeUndefined(typeName ast.ByteSlice) (err ExternalError) {
 	return err
 }
 
+func ErrScalarTypeUndefined(scalarName ast.ByteSlice) (err ExternalError) {
+	err.Message = fmt.Sprintf("scalar not defined: %s", scalarName)
+	return err
+}
+
+func ErrInterfaceTypeUndefined(interfaceName ast.ByteSlice) (err ExternalError) {
+	err.Message = fmt.Sprintf("interface type not defined: %s", interfaceName)
+	return err
+}
+
+func ErrUnionTypeUndefined(unionName ast.ByteSlice) (err ExternalError) {
+	err.Message = fmt.Sprintf("union type not defined: %s", unionName)
+	return err
+}
+
+func ErrEnumTypeUndefined(enumName ast.ByteSlice) (err ExternalError) {
+	err.Message = fmt.Sprintf("enum type not defined: %s", enumName)
+	return err
+}
+
+func ErrInputObjectTypeUndefined(inputObjectName ast.ByteSlice) (err ExternalError) {
+	err.Message = fmt.Sprintf("input object type not defined: %s", inputObjectName)
+	return err
+}
+
 func ErrTypeNameMustBeUnique(typeName ast.ByteSlice) (err ExternalError) {
 	err.Message = fmt.Sprintf("there can be only one type named '%s'", typeName)
 	return err
@@ -216,5 +241,25 @@ func ErrOnlyOneSubscriptionTypeAllowed() (err ExternalError) {
 
 func ErrEnumValueNameMustBeUnique(enumName, enumValueName ast.ByteSlice) (err ExternalError) {
 	err.Message = fmt.Sprintf("enum value '%s.%s' can only be defined once", enumName, enumValueName)
+	return err
+}
+
+func ErrTransitiveInterfaceNotImplemented(typeName, transitiveInterfaceName ast.ByteSlice) (err ExternalError) {
+	err.Message = fmt.Sprintf("type %s does not implement transitive interface %s", typeName, transitiveInterfaceName)
+	return err
+}
+
+func ErrTransitiveInterfaceExtensionImplementingWithoutBody(interfaceExtensionName ast.ByteSlice) (err ExternalError) {
+	err.Message = fmt.Sprintf("interface extension %s implementing interface without body", interfaceExtensionName)
+	return err
+}
+
+func ErrTypeDoesNotImplementFieldFromInterface(typeName, interfaceName, fieldName ast.ByteSlice) (err ExternalError) {
+	err.Message = fmt.Sprintf("type '%s' does not implement field '%s' from interface '%s'", typeName, fieldName, interfaceName)
+	return err
+}
+
+func ErrImplementingTypeDoesNotHaveFields(typeName ast.ByteSlice) (err ExternalError) {
+	err.Message = fmt.Sprintf("type '%s' implements an interface but does not have any fields defined", typeName)
 	return err
 }

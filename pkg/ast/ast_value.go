@@ -32,6 +32,40 @@ type Value struct {
 	Ref  int
 }
 
+func (d *Document) CopyValue(ref int) int {
+	return d.AddValue(Value{
+		Kind: d.Values[ref].Kind,
+		Ref:  d.copyValueRef(d.Values[ref].Kind, d.Values[ref].Ref),
+	})
+}
+
+func (d *Document) copyValueRef(kind ValueKind, valueRef int) int {
+	switch kind {
+	case ValueKindString:
+		return d.CopyStringValue(valueRef)
+	case ValueKindBoolean:
+		// Nothing to copy!
+		return valueRef
+	case ValueKindInteger:
+		return d.CopyIntValue(valueRef)
+	case ValueKindFloat:
+		return d.CopyFloatValue(valueRef)
+	case ValueKindVariable:
+		return d.CopyVariableValue(valueRef)
+	case ValueKindNull:
+		// Nothing to copy!
+		return InvalidRef
+	case ValueKindList:
+		return d.CopyListValue(valueRef)
+	case ValueKindObject:
+		return d.CopyObjectValue(valueRef)
+	case ValueKindEnum:
+		return d.CopyEnumValue(valueRef)
+	default:
+		return InvalidRef
+	}
+}
+
 func (d *Document) ValueContentBytes(value Value) ByteSlice {
 	switch value.Kind {
 	case ValueKindEnum:
@@ -48,6 +82,41 @@ func (d *Document) ValueContentBytes(value Value) ByteSlice {
 
 func (d *Document) ValueContentString(value Value) string {
 	return unsafebytes.BytesToString(d.ValueContentBytes(value))
+}
+
+func (d *Document) ValueContainsVariable(value Value) bool {
+	switch value.Kind {
+	case ValueKindEnum:
+		return false
+	case ValueKindBoolean:
+		return false
+	case ValueKindFloat:
+		return false
+	case ValueKindList:
+		for _, ref := range d.ListValues[value.Ref].Refs {
+			if d.ValueContainsVariable(d.Value(ref)) {
+				return true
+			}
+		}
+		return false
+	case ValueKindObject:
+		for _, ref := range d.ObjectValues[value.Ref].Refs {
+			if d.ValueContainsVariable(d.ObjectFields[ref].Value) {
+				return true
+			}
+		}
+		return false
+	case ValueKindInteger:
+		return false
+	case ValueKindNull:
+		return false
+	case ValueKindString:
+		return false
+	case ValueKindVariable:
+		return true
+	default:
+		return false
+	}
 }
 
 func (d *Document) ValueToJSON(value Value) ([]byte, error) {

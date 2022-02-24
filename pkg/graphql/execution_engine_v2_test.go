@@ -142,18 +142,31 @@ func TestWithAdditionalHttpHeaders(t *testing.T) {
 }
 
 type ExecutionEngineV2TestCase struct {
-	schema           *Schema
-	operation        func(t *testing.T) Request
-	dataSources      []plan.DataSourceConfiguration
-	fields           plan.FieldConfigurations
-	engineOptions    []ExecutionOptionsV2
-	expectedResponse string
+	schema                            *Schema
+	operation                         func(t *testing.T) Request
+	dataSources                       []plan.DataSourceConfiguration
+	generateChildrenForFirstRootField bool
+	fields                            plan.FieldConfigurations
+	engineOptions                     []ExecutionOptionsV2
+	expectedResponse                  string
 }
 
 func TestExecutionEngineV2_Execute(t *testing.T) {
 	run := func(testCase ExecutionEngineV2TestCase, withError bool) func(t *testing.T) {
 		return func(t *testing.T) {
 			engineConf := NewEngineV2Configuration(testCase.schema)
+			if testCase.generateChildrenForFirstRootField {
+				for i := 0; i < len(testCase.dataSources); i++ {
+					children := testCase.schema.GetAllNestedFieldChildrenFromTypeField(testCase.dataSources[i].RootNodes[0].TypeName, testCase.dataSources[i].RootNodes[0].FieldNames[0])
+					testCase.dataSources[i].ChildNodes = make([]plan.TypeField, len(children))
+					for j, child := range children {
+						testCase.dataSources[i].ChildNodes[j] = plan.TypeField{
+							TypeName:   child.TypeName,
+							FieldNames: child.FieldNames,
+						}
+					}
+				}
+			}
 			engineConf.SetDataSources(testCase.dataSources)
 			engineConf.SetFieldConfigurations(testCase.fields)
 			ctx, cancel := context.WithCancel(context.Background())
@@ -167,7 +180,8 @@ func TestExecutionEngineV2_Execute(t *testing.T) {
 			defer execCtxCancel()
 			err = engine.Execute(execCtx, &operation, &resultWriter, testCase.engineOptions...)
 
-			assert.Equal(t, testCase.expectedResponse, resultWriter.String())
+			actualResponse := resultWriter.String()
+			assert.Equal(t, testCase.expectedResponse, actualResponse)
 
 			if withError {
 				assert.Error(t, err)
@@ -209,6 +223,93 @@ func TestExecutionEngineV2_Execute(t *testing.T) {
 			expectedResponse: "",
 		},
 	))
+
+	t.Run("introspection", func(t *testing.T) {
+		schema := starwarsSchema(t)
+
+		t.Run("execute type introspection query", runWithoutError(
+			ExecutionEngineV2TestCase{
+				schema: schema,
+				operation: func(t *testing.T) Request {
+					return Request{
+						OperationName: "myIntrospection",
+						Query: `
+							query myIntrospection(){
+								q: __type(name: "Query") {
+									name
+									kind
+									fields {
+										name
+									}
+								}
+								h: __type(name: "Human") {
+									name
+									fields {
+										name
+									}
+								}
+							}
+						`,
+					}
+				},
+				expectedResponse: `{"data":{"q":{"name":"Query","kind":"OBJECT","fields":[{"name":"droid"},{"name":"search"}]},"h":{"name":"Human","fields":[{"name":"name"},{"name":"friends"}]}}}`,
+			},
+		))
+
+		t.Run("execute type introspection query for not existing type", runWithoutError(
+			ExecutionEngineV2TestCase{
+				schema: schema,
+				operation: func(t *testing.T) Request {
+					return Request{
+						OperationName: "myIntrospection",
+						Query: `
+							query myIntrospection(){
+								__type(name: "NotExisting") {
+									name
+									kind
+									fields {
+										name
+									}
+								}
+							}
+						`,
+					}
+				},
+				expectedResponse: `{"data":{"__type":null}}`,
+			},
+		))
+
+		t.Run("execute type introspection query with deprecated fields", runWithoutError(
+			ExecutionEngineV2TestCase{
+				schema: schema,
+				operation: func(t *testing.T) Request {
+					return Request{
+						OperationName: "myIntrospection",
+						Query: `query myIntrospection(){
+							__type(name: "Query") {
+								name
+								kind
+								fields(includeDeprecated: true) {
+									name
+								}
+							}
+						}`,
+					}
+				},
+				expectedResponse: `{"data":{"__type":{"name":"Query","kind":"OBJECT","fields":[{"name":"hero"},{"name":"droid"},{"name":"search"}]}}}`,
+			},
+		))
+
+		t.Run("execute full introspection query", runWithoutError(
+			ExecutionEngineV2TestCase{
+				schema: schema,
+				operation: func(t *testing.T) Request {
+					return requestForQuery(t, starwars.FileIntrospectionQuery)
+				},
+				expectedResponse: `{"data":{"__schema":{"queryType":{"name":"Query"},"mutationType":{"name":"Mutation"},"subscriptionType":{"name":"Subscription"},"types":[{"kind":"UNION","name":"SearchResult","description":"","fields":null,"inputFields":[],"interfaces":[],"enumValues":null,"possibleTypes":[{"kind":"OBJECT","name":"Human","ofType":null},{"kind":"OBJECT","name":"Droid","ofType":null},{"kind":"OBJECT","name":"Starship","ofType":null}]},{"kind":"OBJECT","name":"Query","description":"","fields":[{"name":"hero","description":"","args":[],"type":{"kind":"INTERFACE","name":"Character","ofType":null},"isDeprecated":true,"deprecationReason":"No longer supported"},{"name":"droid","description":"","args":[{"name":"id","description":"","type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"SCALAR","name":"ID","ofType":null}},"defaultValue":null}],"type":{"kind":"OBJECT","name":"Droid","ofType":null},"isDeprecated":false,"deprecationReason":null},{"name":"search","description":"","args":[{"name":"name","description":"","type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"SCALAR","name":"String","ofType":null}},"defaultValue":null}],"type":{"kind":"UNION","name":"SearchResult","ofType":null},"isDeprecated":false,"deprecationReason":null}],"inputFields":[],"interfaces":[],"enumValues":null,"possibleTypes":[]},{"kind":"OBJECT","name":"Mutation","description":"","fields":[{"name":"createReview","description":"","args":[{"name":"episode","description":"","type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"ENUM","name":"Episode","ofType":null}},"defaultValue":null},{"name":"review","description":"","type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"INPUT_OBJECT","name":"ReviewInput","ofType":null}},"defaultValue":null}],"type":{"kind":"OBJECT","name":"Review","ofType":null},"isDeprecated":false,"deprecationReason":null}],"inputFields":[],"interfaces":[],"enumValues":null,"possibleTypes":[]},{"kind":"OBJECT","name":"Subscription","description":"","fields":[{"name":"remainingJedis","description":"","args":[],"type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"SCALAR","name":"Int","ofType":null}},"isDeprecated":false,"deprecationReason":null}],"inputFields":[],"interfaces":[],"enumValues":null,"possibleTypes":[]},{"kind":"INPUT_OBJECT","name":"ReviewInput","description":"","fields":null,"inputFields":[{"name":"stars","description":"","type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"SCALAR","name":"Int","ofType":null}},"defaultValue":null},{"name":"commentary","description":"","type":{"kind":"SCALAR","name":"String","ofType":null},"defaultValue":null}],"interfaces":[],"enumValues":null,"possibleTypes":[]},{"kind":"OBJECT","name":"Review","description":"","fields":[{"name":"id","description":"","args":[],"type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"SCALAR","name":"ID","ofType":null}},"isDeprecated":false,"deprecationReason":null},{"name":"stars","description":"","args":[],"type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"SCALAR","name":"Int","ofType":null}},"isDeprecated":false,"deprecationReason":null},{"name":"commentary","description":"","args":[],"type":{"kind":"SCALAR","name":"String","ofType":null},"isDeprecated":false,"deprecationReason":null}],"inputFields":[],"interfaces":[],"enumValues":null,"possibleTypes":[]},{"kind":"ENUM","name":"Episode","description":"","fields":null,"inputFields":[],"interfaces":[],"enumValues":[{"name":"NEWHOPE","description":"","isDeprecated":false,"deprecationReason":null},{"name":"EMPIRE","description":"","isDeprecated":false,"deprecationReason":null},{"name":"JEDI","description":"","isDeprecated":true,"deprecationReason":"No longer supported"}],"possibleTypes":[]},{"kind":"INTERFACE","name":"Character","description":"","fields":[{"name":"name","description":"","args":[],"type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"SCALAR","name":"String","ofType":null}},"isDeprecated":false,"deprecationReason":null},{"name":"friends","description":"","args":[],"type":{"kind":"LIST","name":null,"ofType":{"kind":"INTERFACE","name":"Character","ofType":null}},"isDeprecated":false,"deprecationReason":null}],"inputFields":[],"interfaces":[],"enumValues":null,"possibleTypes":[{"kind":"OBJECT","name":"Human","ofType":null},{"kind":"OBJECT","name":"Droid","ofType":null}]},{"kind":"OBJECT","name":"Human","description":"","fields":[{"name":"name","description":"","args":[],"type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"SCALAR","name":"String","ofType":null}},"isDeprecated":false,"deprecationReason":null},{"name":"height","description":"","args":[],"type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"SCALAR","name":"String","ofType":null}},"isDeprecated":true,"deprecationReason":"No longer supported"},{"name":"friends","description":"","args":[],"type":{"kind":"LIST","name":null,"ofType":{"kind":"INTERFACE","name":"Character","ofType":null}},"isDeprecated":false,"deprecationReason":null}],"inputFields":[],"interfaces":[{"kind":"INTERFACE","name":"Character","ofType":null}],"enumValues":null,"possibleTypes":[]},{"kind":"OBJECT","name":"Droid","description":"","fields":[{"name":"name","description":"","args":[],"type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"SCALAR","name":"String","ofType":null}},"isDeprecated":false,"deprecationReason":null},{"name":"primaryFunction","description":"","args":[],"type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"SCALAR","name":"String","ofType":null}},"isDeprecated":false,"deprecationReason":null},{"name":"friends","description":"","args":[],"type":{"kind":"LIST","name":null,"ofType":{"kind":"INTERFACE","name":"Character","ofType":null}},"isDeprecated":false,"deprecationReason":null}],"inputFields":[],"interfaces":[{"kind":"INTERFACE","name":"Character","ofType":null}],"enumValues":null,"possibleTypes":[]},{"kind":"OBJECT","name":"Starship","description":"","fields":[{"name":"name","description":"","args":[],"type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"SCALAR","name":"String","ofType":null}},"isDeprecated":false,"deprecationReason":null},{"name":"length","description":"","args":[],"type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"SCALAR","name":"Float","ofType":null}},"isDeprecated":false,"deprecationReason":null}],"inputFields":[],"interfaces":[],"enumValues":null,"possibleTypes":[]},{"kind":"SCALAR","name":"Int","description":"The 'Int' scalar type represents non-fractional signed whole numeric values. Int can represent values between -(2^31) and 2^31 - 1.","fields":null,"inputFields":[],"interfaces":[],"enumValues":null,"possibleTypes":[]},{"kind":"SCALAR","name":"Float","description":"The 'Float' scalar type represents signed double-precision fractional values as specified by [IEEE 754](http://en.wikipedia.org/wiki/IEEE_floating_point).","fields":null,"inputFields":[],"interfaces":[],"enumValues":null,"possibleTypes":[]},{"kind":"SCALAR","name":"String","description":"The 'String' scalar type represents textual data, represented as UTF-8 character sequences. The String type is most often used by GraphQL to represent free-form human-readable text.","fields":null,"inputFields":[],"interfaces":[],"enumValues":null,"possibleTypes":[]},{"kind":"SCALAR","name":"Boolean","description":"The 'Boolean' scalar type represents 'true' or 'false' .","fields":null,"inputFields":[],"interfaces":[],"enumValues":null,"possibleTypes":[]},{"kind":"SCALAR","name":"ID","description":"The 'ID' scalar type represents a unique identifier, often used to refetch an object or as key for a cache. The ID type appears in a JSON response as a String; however, it is not intended to be human-readable. When expected as an input type, any string (such as '4') or integer (such as 4) input value will be accepted as an ID.","fields":null,"inputFields":[],"interfaces":[],"enumValues":null,"possibleTypes":[]}],"directives":[{"name":"include","description":"Directs the executor to include this field or fragment only when the argument is true.","locations":["FIELD","FRAGMENT_SPREAD","INLINE_FRAGMENT"],"args":[{"name":"if","description":"Included when true.","type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"SCALAR","name":"Boolean","ofType":null}},"defaultValue":null}]},{"name":"skip","description":"Directs the executor to skip this field or fragment when the argument is true.","locations":["FIELD","FRAGMENT_SPREAD","INLINE_FRAGMENT"],"args":[{"name":"if","description":"Skipped when true.","type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"SCALAR","name":"Boolean","ofType":null}},"defaultValue":null}]},{"name":"deprecated","description":"Marks an element of a GraphQL schema as no longer supported.","locations":["FIELD_DEFINITION","ENUM_VALUE"],"args":[{"name":"reason","description":"Explains why this element was deprecated, usually also including a suggestion\n    for how to access supported similar data. Formatted in\n    [Markdown](https://daringfireball.net/projects/markdown/).","type":{"kind":"SCALAR","name":"String","ofType":null},"defaultValue":"\"No longer supported\""}]}]}}}`,
+			},
+		))
+	})
 
 	t.Run("execute simple hero operation with rest data source", runWithoutError(
 		ExecutionEngineV2TestCase{
@@ -415,7 +516,7 @@ func TestExecutionEngineV2_Execute(t *testing.T) {
 	))
 
 	t.Run("execute operation with array input type", runWithoutError(ExecutionEngineV2TestCase{
-		schema:           heroWithArgumentSchema(t),
+		schema: heroWithArgumentSchema(t),
 		operation: func(t *testing.T) Request {
 			return Request{
 				OperationName: "MyHeroes",
@@ -427,7 +528,7 @@ func TestExecutionEngineV2_Execute(t *testing.T) {
 					}`,
 			}
 		},
-		dataSources:      []plan.DataSourceConfiguration{
+		dataSources: []plan.DataSourceConfiguration{
 			{
 				RootNodes: []plan.TypeField{
 					{TypeName: "Query", FieldNames: []string{"heroes"}},
@@ -449,20 +550,120 @@ func TestExecutionEngineV2_Execute(t *testing.T) {
 				}),
 			},
 		},
-		fields:           []plan.FieldConfiguration{
+		fields: []plan.FieldConfiguration{
 			{
-				TypeName:              "Query",
-				FieldName:             "heroes",
-				Path:                  []string{"heroes"},
+				TypeName:  "Query",
+				FieldName: "heroes",
+				Path:      []string{"heroes"},
 				Arguments: []plan.ArgumentConfiguration{
 					{
-						Name:         "names",
+						Name:       "names",
 						SourceType: plan.FieldArgumentSource,
 					},
 				},
 			},
 		},
 		expectedResponse: `{"data":{"heroes":["Human","Droid"]}}`,
+	}))
+
+	t.Run("execute operation and apply input coercion for lists without variables", runWithoutError(ExecutionEngineV2TestCase{
+		schema: inputCoercionForListSchema(t),
+		operation: func(t *testing.T) Request {
+			return Request{
+				OperationName: "",
+				Variables:     stringify(map[string]interface{}{}),
+				Query: `query{
+						charactersByIds(ids: 1) {
+							name
+						}
+					}`,
+			}
+		},
+		dataSources: []plan.DataSourceConfiguration{
+			{
+				RootNodes: []plan.TypeField{
+					{TypeName: "Query", FieldNames: []string{"charactersByIds"}},
+				},
+				Factory: &graphql_datasource.Factory{
+					HTTPClient: testNetHttpClient(t, roundTripperTestCase{
+						expectedHost:     "example.com",
+						expectedPath:     "/",
+						expectedBody:     `{"query":"query($a: [Int]){charactersByIds(ids: $a)}","variables":{"a":[1]}}`,
+						sendResponseBody: `{"data":{"charactersByIds":[{"name": "Luke"}]}}`,
+						sendStatusCode:   200,
+					}),
+				},
+				Custom: graphql_datasource.ConfigJson(graphql_datasource.Configuration{
+					Fetch: graphql_datasource.FetchConfiguration{
+						URL:    "https://example.com/",
+						Method: "POST",
+					},
+				}),
+			},
+		},
+		fields: []plan.FieldConfiguration{
+			{
+				TypeName:  "Query",
+				FieldName: "charactersByIds",
+				Path:      []string{"charactersByIds"},
+				Arguments: []plan.ArgumentConfiguration{
+					{
+						Name:       "ids",
+						SourceType: plan.FieldArgumentSource,
+					},
+				},
+			},
+		},
+		expectedResponse: `{"data":{"charactersByIds":[{"name":"Luke"}]}}`,
+	}))
+
+	t.Run("execute operation and apply input coercion for lists with variable extraction", runWithoutError(ExecutionEngineV2TestCase{
+		schema: inputCoercionForListSchema(t),
+		operation: func(t *testing.T) Request {
+			return Request{
+				OperationName: "",
+				Variables: stringify(map[string]interface{}{
+					"ids": 1,
+				}),
+				Query: `query($ids: [Int]) { charactersByIds(ids: $ids) { name } }`,
+			}
+		},
+		dataSources: []plan.DataSourceConfiguration{
+			{
+				RootNodes: []plan.TypeField{
+					{TypeName: "Query", FieldNames: []string{"charactersByIds"}},
+				},
+				Factory: &graphql_datasource.Factory{
+					HTTPClient: testNetHttpClient(t, roundTripperTestCase{
+						expectedHost:     "example.com",
+						expectedPath:     "/",
+						expectedBody:     `{"query":"query($ids: [Int]){charactersByIds(ids: $ids)}","variables":{"ids":[1]}}`,
+						sendResponseBody: `{"data":{"charactersByIds":[{"name": "Luke"}]}}`,
+						sendStatusCode:   200,
+					}),
+				},
+				Custom: graphql_datasource.ConfigJson(graphql_datasource.Configuration{
+					Fetch: graphql_datasource.FetchConfiguration{
+						URL:    "https://example.com/",
+						Method: "POST",
+					},
+				}),
+			},
+		},
+		fields: []plan.FieldConfiguration{
+			{
+				TypeName:  "Query",
+				FieldName: "charactersByIds",
+				Path:      []string{"charactersByIds"},
+				Arguments: []plan.ArgumentConfiguration{
+					{
+						Name:       "ids",
+						SourceType: plan.FieldArgumentSource,
+					},
+				},
+			},
+		},
+		expectedResponse: `{"data":{"charactersByIds":[{"name":"Luke"}]}}`,
 	}))
 
 	t.Run("execute operation with arguments", runWithoutError(
@@ -493,6 +694,282 @@ func TestExecutionEngineV2_Execute(t *testing.T) {
 			},
 			fields:           []plan.FieldConfiguration{},
 			expectedResponse: `{"data":{"droid":{"name":"R2D2"}}}`,
+		},
+	))
+
+	t.Run("execute operation with default arguments", func(t *testing.T) {
+		t.Run("query variables with default value", runWithoutError(
+			ExecutionEngineV2TestCase{
+				schema: heroWithArgumentSchema(t),
+				operation: func(t *testing.T) Request {
+					return Request{
+						OperationName: "queryVariables",
+						Variables:     nil,
+						Query: `query queryVariables($name: String! = "R2D2", $nameOptional: String = "R2D2") {
+						  hero(name: $name)
+ 						  hero2: hero(name: $nameOptional)
+						}`,
+					}
+				},
+				dataSources: []plan.DataSourceConfiguration{
+					{
+						RootNodes: []plan.TypeField{
+							{TypeName: "Query", FieldNames: []string{"hero"}},
+						},
+						Factory: &graphql_datasource.Factory{
+							HTTPClient: testNetHttpClient(t, roundTripperTestCase{
+								expectedHost:     "example.com",
+								expectedPath:     "/",
+								expectedBody:     `{"query":"query($name: String!, $nameOptional: String){hero(name: $name) hero2: hero(name: $nameOptional)}","variables":{"nameOptional":"R2D2","name":"R2D2"}}`,
+								sendResponseBody: `{"data":{"hero":"R2D2","hero2":"R2D2"}}`,
+								sendStatusCode:   200,
+							}),
+						},
+						Custom: graphql_datasource.ConfigJson(graphql_datasource.Configuration{
+							Fetch: graphql_datasource.FetchConfiguration{
+								URL:    "https://example.com/",
+								Method: "GET",
+							},
+						}),
+					},
+				},
+				fields: []plan.FieldConfiguration{
+					{
+						TypeName:  "Query",
+						FieldName: "hero",
+						Path:      []string{"hero"},
+						Arguments: []plan.ArgumentConfiguration{
+							{
+								Name:       "name",
+								SourceType: plan.FieldArgumentSource,
+							},
+						},
+					},
+				},
+				expectedResponse: `{"data":{"hero":"R2D2","hero2":"R2D2"}}`,
+			},
+		))
+
+		t.Run("query variables with default value when args provided", runWithoutError(
+			ExecutionEngineV2TestCase{
+				schema: heroWithArgumentSchema(t),
+				operation: func(t *testing.T) Request {
+					return Request{
+						OperationName: "queryVariables",
+						Variables: stringify(map[string]interface{}{
+							"name":         "Luke",
+							"nameOptional": "Skywalker",
+						}),
+						Query: `query queryVariables($name: String! = "R2D2", $nameOptional: String = "R2D2") {
+						  hero(name: $name)
+ 						  hero2: hero(name: $nameOptional)
+						}`,
+					}
+				},
+				dataSources: []plan.DataSourceConfiguration{
+					{
+						RootNodes: []plan.TypeField{
+							{TypeName: "Query", FieldNames: []string{"hero"}},
+						},
+						Factory: &graphql_datasource.Factory{
+							HTTPClient: testNetHttpClient(t, roundTripperTestCase{
+								expectedHost:     "example.com",
+								expectedPath:     "/",
+								expectedBody:     `{"query":"query($name: String!, $nameOptional: String){hero(name: $name) hero2: hero(name: $nameOptional)}","variables":{"nameOptional":"Skywalker","name":"Luke"}}`,
+								sendResponseBody: `{"data":{"hero":"R2D2","hero2":"R2D2"}}`,
+								sendStatusCode:   200,
+							}),
+						},
+						Custom: graphql_datasource.ConfigJson(graphql_datasource.Configuration{
+							Fetch: graphql_datasource.FetchConfiguration{
+								URL:    "https://example.com/",
+								Method: "GET",
+							},
+						}),
+					},
+				},
+				fields: []plan.FieldConfiguration{
+					{
+						TypeName:  "Query",
+						FieldName: "hero",
+						Path:      []string{"hero"},
+						Arguments: []plan.ArgumentConfiguration{
+							{
+								Name:       "name",
+								SourceType: plan.FieldArgumentSource,
+							},
+						},
+					},
+				},
+				expectedResponse: `{"data":{"hero":"R2D2","hero2":"R2D2"}}`,
+			},
+		))
+
+		t.Run("query variables with default values for fields with required and optional args", runWithoutError(
+			ExecutionEngineV2TestCase{
+				schema: heroWithArgumentSchema(t),
+				operation: func(t *testing.T) Request {
+					return Request{
+						OperationName: "queryVariables",
+						Variables:     nil,
+						Query: `query queryVariables($name: String! = "R2D2", $nameOptional: String = "R2D2") {
+						  hero: heroDefault(name: $name)
+ 						  hero2: heroDefault(name: $nameOptional)
+						  hero3: heroDefaultRequired(name: $name)
+ 						  hero4: heroDefaultRequired(name: $nameOptional)
+						}`,
+					}
+				},
+				dataSources: []plan.DataSourceConfiguration{
+					{
+						RootNodes: []plan.TypeField{
+							{TypeName: "Query", FieldNames: []string{"heroDefault", "heroDefaultRequired"}},
+						},
+						Factory: &graphql_datasource.Factory{
+							HTTPClient: testNetHttpClient(t, roundTripperTestCase{
+								expectedHost:     "example.com",
+								expectedPath:     "/",
+								expectedBody:     `{"query":"query($name: String!, $nameOptional: String){hero: heroDefault(name: $name) hero2: heroDefault(name: $nameOptional) hero3: heroDefaultRequired(name: $name) hero4: heroDefaultRequired(name: $nameOptional)}","variables":{"nameOptional":"R2D2","name":"R2D2"}}`,
+								sendResponseBody: `{"data":{"hero":"R2D2","hero2":"R2D2","hero3":"R2D2","hero4":"R2D2"}}`,
+								sendStatusCode:   200,
+							}),
+						},
+						Custom: graphql_datasource.ConfigJson(graphql_datasource.Configuration{
+							Fetch: graphql_datasource.FetchConfiguration{
+								URL:    "https://example.com/",
+								Method: "GET",
+							},
+						}),
+					},
+				},
+				fields: []plan.FieldConfiguration{
+					{
+						TypeName:  "Query",
+						FieldName: "heroDefault",
+						Path:      []string{"heroDefault"},
+						Arguments: []plan.ArgumentConfiguration{
+							{
+								Name:       "name",
+								SourceType: plan.FieldArgumentSource,
+							},
+						},
+					},
+					{
+						TypeName:  "Query",
+						FieldName: "heroDefaultRequired",
+						Path:      []string{"heroDefaultRequired"},
+						Arguments: []plan.ArgumentConfiguration{
+							{
+								Name:       "name",
+								SourceType: plan.FieldArgumentSource,
+							},
+						},
+					},
+				},
+				expectedResponse: `{"data":{"hero":"R2D2","hero2":"R2D2","hero3":"R2D2","hero4":"R2D2"}}`,
+			},
+		))
+
+		t.Run("query fields with default value", runWithoutError(
+			ExecutionEngineV2TestCase{
+				schema: heroWithArgumentSchema(t),
+				operation: func(t *testing.T) Request {
+					return Request{
+						OperationName: "fieldArgs",
+						Variables:     nil,
+						Query: `query fieldArgs {
+						  heroDefault
+ 						  heroDefaultRequired
+						}`,
+					}
+				},
+				dataSources: []plan.DataSourceConfiguration{
+					{
+						RootNodes: []plan.TypeField{
+							{TypeName: "Query", FieldNames: []string{"heroDefault", "heroDefaultRequired"}},
+						},
+						Factory: &graphql_datasource.Factory{
+							HTTPClient: testNetHttpClient(t, roundTripperTestCase{
+								expectedHost:     "example.com",
+								expectedPath:     "/",
+								expectedBody:     `{"query":"query($a: String, $b: String!){heroDefault(name: $a) heroDefaultRequired(name: $b)}","variables":{"b":"AnyRequired","a":"Any"}}`,
+								sendResponseBody: `{"data":{"heroDefault":"R2D2","heroDefaultRequired":"R2D2"}}`,
+								sendStatusCode:   200,
+							}),
+						},
+						Custom: graphql_datasource.ConfigJson(graphql_datasource.Configuration{
+							Fetch: graphql_datasource.FetchConfiguration{
+								URL:    "https://example.com/",
+								Method: "GET",
+							},
+						}),
+					},
+				},
+				fields: []plan.FieldConfiguration{
+					{
+						TypeName:  "Query",
+						FieldName: "heroDefault",
+						Path:      []string{"heroDefault"},
+						Arguments: []plan.ArgumentConfiguration{
+							{
+								Name:       "name",
+								SourceType: plan.FieldArgumentSource,
+							},
+						},
+					},
+					{
+						TypeName:  "Query",
+						FieldName: "heroDefaultRequired",
+						Path:      []string{"heroDefaultRequired"},
+						Arguments: []plan.ArgumentConfiguration{
+							{
+								Name:       "name",
+								SourceType: plan.FieldArgumentSource,
+							},
+						},
+					},
+				},
+				expectedResponse: `{"data":{"heroDefault":"R2D2","heroDefaultRequired":"R2D2"}}`,
+			},
+		))
+
+	})
+
+	t.Run("execute query with data source on field with interface return type", runWithoutError(
+		ExecutionEngineV2TestCase{
+			schema: createCountriesSchema(t),
+			operation: func(t *testing.T) Request {
+				return Request{
+					OperationName: "",
+					Variables:     nil,
+					Query:         `{ codeType { code ...on Country { name } } }`,
+				}
+			},
+			generateChildrenForFirstRootField: true,
+			dataSources: []plan.DataSourceConfiguration{
+				{
+					RootNodes: []plan.TypeField{
+						{TypeName: "Query", FieldNames: []string{"codeType"}},
+					},
+					Factory: &graphql_datasource.Factory{
+						HTTPClient: testNetHttpClient(t, roundTripperTestCase{
+							expectedHost:     "example.com",
+							expectedPath:     "/",
+							expectedBody:     `{"query":"{codeType {code __typename ... on Country {name}}}"}`,
+							sendResponseBody: `{"data":{"codeType":{"__typename":"Country","code":"de","name":"Germany"}}}`,
+							sendStatusCode:   200,
+						}),
+					},
+					Custom: graphql_datasource.ConfigJson(graphql_datasource.Configuration{
+						Fetch: graphql_datasource.FetchConfiguration{
+							URL:    "https://example.com/",
+							Method: "GET",
+						},
+					}),
+				},
+			},
+			fields:           []plan.FieldConfiguration{},
+			expectedResponse: `{"data":{"codeType":{"code":"de","name":"Germany"}}}`,
 		},
 	))
 
@@ -601,7 +1078,7 @@ func TestExecutionEngineV2_Execute(t *testing.T) {
 					Arguments: []plan.ArgumentConfiguration{
 						{
 							Name:         "name",
-							RenderConfig: plan.RenderArgumentAsGraphQLValue,
+							RenderConfig: plan.RenderArgumentAsJSONValue,
 						},
 					},
 				},
@@ -1410,4 +1887,10 @@ func newPollingUpstreamHandler() http.Handler {
 		respBody := fmt.Sprintf(`{"counter":%d}`, counter)
 		_, _ = w.Write([]byte(respBody))
 	})
+}
+
+func createCountriesSchema(t *testing.T) *Schema {
+	schema, err := NewSchemaFromString(countriesSchema)
+	require.NoError(t, err)
+	return schema
 }

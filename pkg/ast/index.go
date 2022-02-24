@@ -3,7 +3,7 @@ package ast
 import (
 	"bytes"
 
-	"github.com/cespare/xxhash"
+	"github.com/cespare/xxhash/v2"
 
 	"github.com/jensneuse/graphql-go-tools/internal/pkg/unsafebytes"
 )
@@ -70,7 +70,7 @@ func (i *Index) FirstNodeByNameStr(name string) (Node, bool) {
 	hash := xxhash.Sum64String(name)
 	node, exists := i.nodes[hash]
 	if !exists || len(node) == 0 {
-		return Node{}, false
+		return InvalidNode, false
 	}
 	return node[0], true
 }
@@ -85,7 +85,7 @@ func (i *Index) FirstNodeByNameBytes(name []byte) (Node, bool) {
 	hash := xxhash.Sum64(name)
 	node, exists := i.nodes[hash]
 	if !exists || len(node) == 0 {
-		return Node{}, false
+		return InvalidNode, false
 	}
 	return node[0], true
 }
@@ -94,7 +94,7 @@ func (i *Index) FirstNonExtensionNodeByNameBytes(name []byte) (Node, bool) {
 	hash := xxhash.Sum64(name)
 	nodes, exists := i.nodes[hash]
 	if !exists || len(nodes) == 0 {
-		return Node{}, false
+		return InvalidNode, false
 	}
 
 	for j := range nodes {
@@ -105,7 +105,7 @@ func (i *Index) FirstNonExtensionNodeByNameBytes(name []byte) (Node, bool) {
 		return nodes[j], true
 	}
 
-	return Node{}, false
+	return InvalidNode, false
 }
 
 func (i *Index) RemoveNodeByName(name []byte) {
@@ -122,6 +122,22 @@ func (i *Index) RemoveNodeByName(name []byte) {
 
 	if bytes.Equal(i.SubscriptionTypeName, name) {
 		i.SubscriptionTypeName = nil
+	}
+}
+
+func (i *Index) ReplaceNode(name []byte, oldNode Node, newNode Node) {
+	nodes, ok := i.nodes[xxhash.Sum64(name)]
+	if !ok {
+		return
+	}
+
+	for i := range nodes {
+		if nodes[i].Kind != oldNode.Kind || nodes[i].Ref != oldNode.Ref {
+			continue
+		}
+
+		nodes[i].Kind = newNode.Kind
+		nodes[i].Ref = newNode.Ref
 	}
 }
 

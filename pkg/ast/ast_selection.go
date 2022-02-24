@@ -28,6 +28,34 @@ type Selection struct {
 	Ref  int           // reference to the actual selection
 }
 
+func (d *Document) CopySelection(ref int) int {
+	innerRef := -1
+
+	switch d.Selections[ref].Kind {
+	case SelectionKindField:
+		innerRef = d.CopyField(d.Selections[ref].Ref)
+	case SelectionKindFragmentSpread:
+		innerRef = d.CopyFragmentSpread(d.Selections[ref].Ref)
+	case SelectionKindInlineFragment:
+		innerRef = d.CopyInlineFragment(d.Selections[ref].Ref)
+	}
+
+	return d.AddSelectionToDocument(Selection{
+		Kind: d.Selections[ref].Kind,
+		Ref:  innerRef,
+	})
+}
+
+func (d *Document) CopySelectionSet(ref int) int {
+	refs := d.NewEmptyRefs()
+	for _, r := range d.SelectionSets[ref].SelectionRefs {
+		refs = append(refs, d.CopySelection(r))
+	}
+	return d.AddSelectionSetToDocument(SelectionSet{
+		SelectionRefs: refs,
+	})
+}
+
 func (d *Document) PrintSelections(selections []int) (out string) {
 	out += "["
 	for i, ref := range selections {
@@ -58,7 +86,7 @@ func (d *Document) SelectionsBeforeField(field int, selectionSet Node) bool {
 	return false
 }
 
-func (d *Document) SelectionsAfterField(field int, selectionSet Node) bool {
+func (d *Document) SelectionsAfter(selectionKind SelectionKind, selectionRef int, selectionSet Node) bool {
 	if selectionSet.Kind != NodeKindSelectionSet {
 		return false
 	}
@@ -68,43 +96,47 @@ func (d *Document) SelectionsAfterField(field int, selectionSet Node) bool {
 	}
 
 	for i, j := range d.SelectionSets[selectionSet.Ref].SelectionRefs {
-		if d.Selections[j].Kind == SelectionKindField && d.Selections[j].Ref == field {
+		if d.Selections[j].Kind == selectionKind && d.Selections[j].Ref == selectionRef {
 			return i != len(d.SelectionSets[selectionSet.Ref].SelectionRefs)-1
 		}
 	}
 
 	return false
+}
+
+func (d *Document) SelectionsAfterField(field int, selectionSet Node) bool {
+	return d.SelectionsAfter(SelectionKindField, field, selectionSet)
 }
 
 func (d *Document) SelectionsAfterInlineFragment(inlineFragment int, selectionSet Node) bool {
-	if selectionSet.Kind != NodeKindSelectionSet {
-		return false
-	}
+	return d.SelectionsAfter(SelectionKindInlineFragment, inlineFragment, selectionSet)
+}
 
-	if len(d.SelectionSets[selectionSet.Ref].SelectionRefs) == 1 {
-		return false
-	}
+func (d *Document) SelectionsAfterFragmentSpread(fragmentSpread int, selectionSet Node) bool {
+	return d.SelectionsAfter(SelectionKindFragmentSpread, fragmentSpread, selectionSet)
+}
 
-	for i, j := range d.SelectionSets[selectionSet.Ref].SelectionRefs {
-		if d.Selections[j].Kind == SelectionKindInlineFragment && d.Selections[j].Ref == inlineFragment {
-			return i != len(d.SelectionSets[selectionSet.Ref].SelectionRefs)-1
-		}
-	}
-
-	return false
+func (d *Document) AddSelectionSetToDocument(set SelectionSet) int {
+	d.SelectionSets = append(d.SelectionSets, set)
+	return len(d.SelectionSets) - 1
 }
 
 func (d *Document) AddSelectionSet() Node {
-	d.SelectionSets = append(d.SelectionSets, SelectionSet{SelectionRefs: d.Refs[d.NextRefIndex()][:0]})
 	return Node{
 		Kind: NodeKindSelectionSet,
-		Ref:  len(d.SelectionSets) - 1,
+		Ref: d.AddSelectionSetToDocument(SelectionSet{
+			SelectionRefs: d.Refs[d.NextRefIndex()][:0],
+		}),
 	}
 }
 
-func (d *Document) AddSelection(set int, selection Selection) {
+func (d *Document) AddSelectionToDocument(selection Selection) int {
 	d.Selections = append(d.Selections, selection)
-	d.SelectionSets[set].SelectionRefs = append(d.SelectionSets[set].SelectionRefs, len(d.Selections)-1)
+	return len(d.Selections) - 1
+}
+
+func (d *Document) AddSelection(set int, selection Selection) {
+	d.SelectionSets[set].SelectionRefs = append(d.SelectionSets[set].SelectionRefs, d.AddSelectionToDocument(selection))
 }
 
 func (d *Document) EmptySelectionSet(ref int) {

@@ -8,18 +8,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/textproto"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/buger/jsonparser"
-	"github.com/cespare/xxhash"
-
+	"github.com/cespare/xxhash/v2"
 	errors "golang.org/x/xerrors"
 
 	"github.com/jensneuse/graphql-go-tools/internal/pkg/unsafebytes"
-	"github.com/jensneuse/graphql-go-tools/pkg/ast"
 	"github.com/jensneuse/graphql-go-tools/pkg/fastbuffer"
 	"github.com/jensneuse/graphql-go-tools/pkg/lexer/literal"
 	"github.com/jensneuse/graphql-go-tools/pkg/pool"
@@ -403,13 +400,13 @@ func (r *Resolver) resolveNode(ctx *Context, node Node, data []byte, bufPair *Bu
 		r.resolveNull(bufPair.Data)
 		return
 	case *String:
-		return r.resolveString(n, data, bufPair)
+		return r.resolveString(ctx, n, data, bufPair)
 	case *Boolean:
-		return r.resolveBoolean(n, data, bufPair)
+		return r.resolveBoolean(ctx, n, data, bufPair)
 	case *Integer:
-		return r.resolveInteger(n, data, bufPair)
+		return r.resolveInteger(ctx, n, data, bufPair)
 	case *Float:
-		return r.resolveFloat(n, data, bufPair)
+		return r.resolveFloat(ctx, n, data, bufPair)
 	case *EmptyObject:
 		r.resolveEmptyObject(bufPair.Data)
 		return
@@ -709,6 +706,10 @@ func (r *Resolver) resolveArray(ctx *Context, array *Array, data []byte, arrayBu
 		data, _, _, _ = jsonparser.Get(data, array.Path...)
 	}
 
+	if array.UnescapeResponseJson {
+		data = bytes.ReplaceAll(data, []byte(`\"`), []byte(`"`))
+	}
+
 	if bytes.Equal(data, emptyArray) {
 		r.resolveEmptyArray(arrayBuf.Data)
 		return
@@ -858,7 +859,17 @@ func (r *Resolver) resolveArrayAsynchronous(ctx *Context, array *Array, arrayIte
 	return
 }
 
-func (r *Resolver) resolveInteger(integer *Integer, data []byte, integerBuf *BufPair) error {
+func (r *Resolver) exportField(ctx *Context, export *FieldExport, value []byte) {
+	if export == nil {
+		return
+	}
+	if export.AsString {
+		value = append(literal.QUOTE, append(value, literal.QUOTE...)...)
+	}
+	ctx.Variables, _ = jsonparser.Set(ctx.Variables, value, export.Path...)
+}
+
+func (r *Resolver) resolveInteger(ctx *Context, integer *Integer, data []byte, integerBuf *BufPair) error {
 	value, dataType, _, err := jsonparser.Get(data, integer.Path...)
 	if err != nil || dataType != jsonparser.Number {
 		if !integer.Nullable {
@@ -868,10 +879,11 @@ func (r *Resolver) resolveInteger(integer *Integer, data []byte, integerBuf *Buf
 		return nil
 	}
 	integerBuf.Data.WriteBytes(value)
+	r.exportField(ctx, integer.Export, value)
 	return nil
 }
 
-func (r *Resolver) resolveFloat(floatValue *Float, data []byte, floatBuf *BufPair) error {
+func (r *Resolver) resolveFloat(ctx *Context, floatValue *Float, data []byte, floatBuf *BufPair) error {
 	value, dataType, _, err := jsonparser.Get(data, floatValue.Path...)
 	if err != nil || dataType != jsonparser.Number {
 		if !floatValue.Nullable {
@@ -881,10 +893,11 @@ func (r *Resolver) resolveFloat(floatValue *Float, data []byte, floatBuf *BufPai
 		return nil
 	}
 	floatBuf.Data.WriteBytes(value)
+	r.exportField(ctx, floatValue.Export, value)
 	return nil
 }
 
-func (r *Resolver) resolveBoolean(boolean *Boolean, data []byte, booleanBuf *BufPair) error {
+func (r *Resolver) resolveBoolean(ctx *Context, boolean *Boolean, data []byte, booleanBuf *BufPair) error {
 	value, valueType, _, err := jsonparser.Get(data, boolean.Path...)
 	if err != nil || valueType != jsonparser.Boolean {
 		if !boolean.Nullable {
@@ -894,10 +907,11 @@ func (r *Resolver) resolveBoolean(boolean *Boolean, data []byte, booleanBuf *Buf
 		return nil
 	}
 	booleanBuf.Data.WriteBytes(value)
+	r.exportField(ctx, boolean.Export, value)
 	return nil
 }
 
-func (r *Resolver) resolveString(str *String, data []byte, stringBuf *BufPair) error {
+func (r *Resolver) resolveString(ctx *Context, str *String, data []byte, stringBuf *BufPair) error {
 	var (
 		value     []byte
 		valueType jsonparser.ValueType
@@ -906,6 +920,13 @@ func (r *Resolver) resolveString(str *String, data []byte, stringBuf *BufPair) e
 
 	value, valueType, _, err = jsonparser.Get(data, str.Path...)
 	if err != nil || valueType != jsonparser.String {
+		if err == nil && str.UnescapeResponseJson {
+			switch valueType {
+			case jsonparser.Object, jsonparser.Array, jsonparser.Boolean, jsonparser.Number, jsonparser.Null:
+				stringBuf.Data.WriteBytes(value)
+				return nil
+			}
+		}
 		if !str.Nullable {
 			return errNonNullableFieldValueIsNull
 		}
@@ -916,9 +937,18 @@ func (r *Resolver) resolveString(str *String, data []byte, stringBuf *BufPair) e
 	if value == nil && !str.Nullable {
 		return errNonNullableFieldValueIsNull
 	}
+
+	if str.UnescapeResponseJson {
+		value = bytes.ReplaceAll(value, []byte(`\"`), []byte(`"`))
+		stringBuf.Data.WriteBytes(value)
+		r.exportField(ctx, str.Export, value)
+		return nil
+	}
+
 	stringBuf.Data.WriteBytes(quote)
 	stringBuf.Data.WriteBytes(value)
 	stringBuf.Data.WriteBytes(quote)
+	r.exportField(ctx, str.Export, value)
 	return nil
 }
 
@@ -988,6 +1018,10 @@ func (r *Resolver) resolveObject(ctx *Context, object *Object, data []byte, obje
 		defer ctx.removeResponseLastElements(object.Path)
 	}
 
+	if object.UnescapeResponseJson {
+		data = bytes.ReplaceAll(data, []byte(`\"`), []byte(`"`))
+	}
+
 	var set *resultSet
 	if object.Fetch != nil {
 		set = r.getResultSet()
@@ -1009,7 +1043,24 @@ func (r *Resolver) resolveObject(ctx *Context, object *Object, data []byte, obje
 
 	typeNameSkip := false
 	first := true
+	skipCount := 0
 	for i := range object.Fields {
+
+		if object.Fields[i].SkipDirectiveDefined {
+			skip, err := jsonparser.GetBoolean(ctx.Variables, object.Fields[i].SkipVariableName)
+			if err == nil && skip {
+				skipCount++
+				continue
+			}
+		}
+
+		if object.Fields[i].IncludeDirectiveDefined {
+			include, err := jsonparser.GetBoolean(ctx.Variables, object.Fields[i].IncludeVariableName)
+			if err != nil || !include {
+				skipCount++
+				continue
+			}
+		}
 
 		var fieldData []byte
 		if set != nil && object.Fields[i].HasBuffer {
@@ -1071,6 +1122,13 @@ func (r *Resolver) resolveObject(ctx *Context, object *Object, data []byte, obje
 			return
 		}
 		r.MergeBufPairs(fieldBuf, objectBuf, false)
+	}
+	allSkipped := len(object.Fields) != 0 && len(object.Fields) == skipCount
+	if allSkipped {
+		// return empty object if all fields have been skipped
+		objectBuf.Data.WriteBytes(lBrace)
+		objectBuf.Data.WriteBytes(rBrace)
+		return
 	}
 	if first {
 		if typeNameSkip && !object.Nullable {
@@ -1190,18 +1248,18 @@ func (r *Resolver) resolveBatchFetch(ctx *Context, fetch *BatchFetch, preparedIn
 }
 
 func (r *Resolver) resolveSingleFetch(ctx *Context, fetch *SingleFetch, preparedInput *fastbuffer.FastBuffer, buf *BufPair) error {
-	if r.dataLoaderEnabled {
+	if r.dataLoaderEnabled && !fetch.DisableDataLoader {
 		return ctx.dataLoader.Load(ctx, fetch, buf)
 	}
-
 	return r.fetcher.Fetch(ctx, fetch, preparedInput, buf)
 }
 
 type Object struct {
-	Nullable bool
-	Path     []string
-	Fields   []*Field
-	Fetch    Fetch
+	Nullable             bool
+	Path                 []string
+	Fields               []*Field
+	Fetch                Fetch
+	UnescapeResponseJson bool `json:"unescape_response_json,omitempty"`
 }
 
 func (_ *Object) NodeKind() NodeKind {
@@ -1221,14 +1279,18 @@ func (_ *EmptyArray) NodeKind() NodeKind {
 }
 
 type Field struct {
-	Name       []byte
-	Value      Node
-	Position   Position
-	Defer      *DeferField
-	Stream     *StreamField
-	HasBuffer  bool
-	BufferID   int
-	OnTypeName []byte
+	Name                    []byte
+	Value                   Node
+	Position                Position
+	Defer                   *DeferField
+	Stream                  *StreamField
+	HasBuffer               bool
+	BufferID                int
+	OnTypeName              []byte
+	SkipDirectiveDefined    bool
+	SkipVariableName        string
+	IncludeDirectiveDefined bool
+	IncludeVariableName     string
 }
 
 type Position struct {
@@ -1269,6 +1331,7 @@ type SingleFetch struct {
 	// If the resolver allows SingleFlight it's up the each individual DataSource Planner to decide whether an Operation
 	// should be allowed to use SingleFlight
 	DisallowSingleFlight  bool
+	DisableDataLoader     bool
 	InputTemplate         InputTemplate
 	DataSourceIdentifier  []byte
 	ProcessResponseConfig ProcessResponseConfig
@@ -1277,203 +1340,6 @@ type SingleFetch struct {
 type ProcessResponseConfig struct {
 	ExtractGraphqlResponse    bool
 	ExtractFederationEntities bool
-}
-
-type InputTemplate struct {
-	Segments []TemplateSegment
-}
-
-func (i *InputTemplate) Render(ctx *Context, data []byte, preparedInput *fastbuffer.FastBuffer) (err error) {
-	for j := range i.Segments {
-		switch i.Segments[j].SegmentType {
-		case StaticSegmentType:
-			preparedInput.WriteBytes(i.Segments[j].Data)
-		case VariableSegmentType:
-			switch i.Segments[j].VariableSource {
-			case VariableSourceObject:
-				err = i.renderObjectVariable(data, i.Segments[j], preparedInput)
-			case VariableSourceContext:
-				err = i.renderContextVariable(ctx, i.Segments[j], preparedInput)
-			case VariableSourceRequestHeader:
-				err = i.renderHeaderVariable(ctx, i.Segments[j].VariableSourcePath, preparedInput)
-			default:
-				err = fmt.Errorf("InputTemplate.Render: cannot resolve variable of kind: %d", i.Segments[j].VariableSource)
-			}
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return
-}
-
-func (i *InputTemplate) renderObjectVariable(variables []byte, segment TemplateSegment, preparedInput *fastbuffer.FastBuffer) error {
-	value, valueType, _, err := jsonparser.Get(variables, segment.VariableSourcePath...)
-	if err != nil || valueType == jsonparser.Null {
-		preparedInput.WriteBytes(literal.NULL)
-		return nil
-	}
-	if segment.RenderVariableAsPlainValue {
-		preparedInput.WriteBytes(value)
-		return nil
-	}
-	if segment.RenderVariableAsArrayCSV && segment.VariableValueType == jsonparser.Array {
-		return renderArrayCSV(value, segment.VariableValueArrayValueType, preparedInput)
-	}
-	return renderGraphQLValue(value, segment.VariableValueType, segment.OmitObjectKeyQuotes, segment.EscapeQuotes, preparedInput)
-}
-
-func (i *InputTemplate) renderContextVariable(ctx *Context, segment TemplateSegment, preparedInput *fastbuffer.FastBuffer) error {
-	value, valueType, _, err := jsonparser.Get(ctx.Variables, segment.VariableSourcePath...)
-	if err != nil || valueType == jsonparser.Null {
-		preparedInput.WriteBytes(literal.NULL)
-		return nil
-	}
-	if segment.RenderVariableAsPlainValue {
-		preparedInput.WriteBytes(value)
-		return nil
-	}
-	if segment.RenderVariableAsArrayCSV && segment.VariableValueType == jsonparser.Array {
-		return renderArrayCSV(value, segment.VariableValueArrayValueType, preparedInput)
-	}
-	return renderGraphQLValue(value, segment.VariableValueType, segment.OmitObjectKeyQuotes, segment.EscapeQuotes, preparedInput)
-}
-
-func renderArrayCSV(data []byte, valueType jsonparser.ValueType, buf *fastbuffer.FastBuffer) error {
-	isFirst := true
-	_, err := jsonparser.ArrayEach(data, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
-		if dataType != valueType {
-			return
-		}
-		if isFirst {
-			isFirst = false
-		} else {
-			_, _ = buf.Write(literal.COMMA)
-		}
-		_, _ = buf.Write(value)
-	})
-	return err
-}
-
-func renderGraphQLValue(data []byte, valueType jsonparser.ValueType, omitObjectKeyQuotes, escapeQuotes bool, buf *fastbuffer.FastBuffer) (err error) {
-	switch valueType {
-	case jsonparser.String:
-		if escapeQuotes {
-			buf.WriteBytes(literal.BACKSLASH)
-		}
-		buf.WriteBytes(literal.QUOTE)
-		buf.WriteBytes(data)
-		if escapeQuotes {
-			buf.WriteBytes(literal.BACKSLASH)
-		}
-		buf.WriteBytes(literal.QUOTE)
-	case jsonparser.Object:
-		buf.WriteBytes(literal.LBRACE)
-		first := true
-		err = jsonparser.ObjectEach(data, func(key []byte, value []byte, dataType jsonparser.ValueType, offset int) error {
-			if !first {
-				buf.WriteBytes(literal.COMMA)
-			} else {
-				first = false
-			}
-			if !omitObjectKeyQuotes {
-				if escapeQuotes {
-					buf.WriteBytes(literal.BACKSLASH)
-				}
-				buf.WriteBytes(literal.QUOTE)
-			}
-			buf.WriteBytes(key)
-			if !omitObjectKeyQuotes {
-				if escapeQuotes {
-					buf.WriteBytes(literal.BACKSLASH)
-				}
-				buf.WriteBytes(literal.QUOTE)
-			}
-			buf.WriteBytes(literal.COLON)
-			return renderGraphQLValue(value, dataType, omitObjectKeyQuotes, escapeQuotes, buf)
-		})
-		if err != nil {
-			return err
-		}
-		buf.WriteBytes(literal.RBRACE)
-	case jsonparser.Null:
-		buf.WriteBytes(literal.NULL)
-	case jsonparser.Boolean:
-		buf.WriteBytes(data)
-	case jsonparser.Array:
-		buf.WriteBytes(literal.LBRACK)
-		first := true
-		var arrayErr error
-		_, err = jsonparser.ArrayEach(data, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
-			if !first {
-				buf.WriteBytes(literal.COMMA)
-			} else {
-				first = false
-			}
-			arrayErr = renderGraphQLValue(value, dataType, omitObjectKeyQuotes, escapeQuotes, buf)
-		})
-		if arrayErr != nil {
-			return arrayErr
-		}
-		if err != nil {
-			return err
-		}
-		buf.WriteBytes(literal.RBRACK)
-	case jsonparser.Number:
-		buf.WriteBytes(data)
-	}
-	return
-}
-
-func (i *InputTemplate) renderHeaderVariable(ctx *Context, path []string, preparedInput *fastbuffer.FastBuffer) error {
-	if len(path) != 1 {
-		return errHeaderPathInvalid
-	}
-	// Header.Values is available from go 1.14
-	// value := ctx.Request.Header.Values(path[0])
-	// could be simplified once go 1.12 support will be dropped
-	canonicalName := textproto.CanonicalMIMEHeaderKey(path[0])
-	value := ctx.Request.Header[canonicalName]
-	if len(value) == 0 {
-		return nil
-	}
-	if len(value) == 1 {
-		preparedInput.WriteString(value[0])
-		return nil
-	}
-	for j := range value {
-		if j != 0 {
-			preparedInput.WriteBytes(literal.COMMA)
-		}
-		preparedInput.WriteString(value[j])
-	}
-	return nil
-}
-
-type SegmentType int
-type VariableSource int
-
-const (
-	StaticSegmentType SegmentType = iota + 1
-	VariableSegmentType
-
-	VariableSourceObject VariableSource = iota + 1
-	VariableSourceContext
-	VariableSourceRequestHeader
-)
-
-type TemplateSegment struct {
-	SegmentType                  SegmentType
-	Data                         []byte
-	VariableSource               VariableSource
-	VariableSourcePath           []string
-	VariableValueType            jsonparser.ValueType
-	VariableValueArrayValueType  jsonparser.ValueType
-	RenderVariableAsArrayCSV     bool
-	RenderVariableAsPlainValue   bool
-	RenderVariableAsGraphQLValue bool
-	OmitObjectKeyQuotes          bool
-	EscapeQuotes                 bool
 }
 
 func (_ *SingleFetch) FetchKind() FetchKind {
@@ -1497,9 +1363,18 @@ func (_ *BatchFetch) FetchKind() FetchKind {
 	return FetchKindBatch
 }
 
-type String struct {
+// FieldExport takes the value of the field during evaluation (rendering of the field)
+// and stores it in the variables using the Path as JSON pointer.
+type FieldExport struct {
 	Path     []string
-	Nullable bool
+	AsString bool
+}
+
+type String struct {
+	Path                 []string
+	Nullable             bool
+	Export               *FieldExport `json:"export,omitempty"`
+	UnescapeResponseJson bool         `json:"unescape_response_json,omitempty"`
 }
 
 func (_ *String) NodeKind() NodeKind {
@@ -1509,6 +1384,7 @@ func (_ *String) NodeKind() NodeKind {
 type Boolean struct {
 	Path     []string
 	Nullable bool
+	Export   *FieldExport `json:"export,omitempty"`
 }
 
 func (_ *Boolean) NodeKind() NodeKind {
@@ -1518,6 +1394,7 @@ func (_ *Boolean) NodeKind() NodeKind {
 type Float struct {
 	Path     []string
 	Nullable bool
+	Export   *FieldExport `json:"export,omitempty"`
 }
 
 func (_ *Float) NodeKind() NodeKind {
@@ -1527,6 +1404,7 @@ func (_ *Float) NodeKind() NodeKind {
 type Integer struct {
 	Path     []string
 	Nullable bool
+	Export   *FieldExport `json:"export,omitempty"`
 }
 
 func (_ *Integer) NodeKind() NodeKind {
@@ -1534,11 +1412,12 @@ func (_ *Integer) NodeKind() NodeKind {
 }
 
 type Array struct {
-	Path                []string
-	Nullable            bool
-	ResolveAsynchronous bool
-	Item                Node
-	Stream              Stream
+	Path                 []string
+	Nullable             bool
+	ResolveAsynchronous  bool
+	Item                 Node
+	Stream               Stream
+	UnescapeResponseJson bool `json:"unescape_response_json,omitempty"`
 }
 
 type Stream struct {
@@ -1549,237 +1428,6 @@ type Stream struct {
 
 func (_ *Array) NodeKind() NodeKind {
 	return NodeKindArray
-}
-
-type Variable interface {
-	VariableKind() VariableKind
-	Equals(another Variable) bool
-	TemplateSegment() TemplateSegment
-}
-
-type Variables []Variable
-
-func NewVariables(variables ...Variable) Variables {
-	return variables
-}
-
-const (
-	variablePrefixSuffix = "$$"
-)
-
-func (v *Variables) AddVariable(variable Variable) (name string, exists bool) {
-	index := -1
-	for i := range *v {
-		if (*v)[i].Equals(variable) {
-			index = i
-			exists = true
-			break
-		}
-	}
-	if index == -1 {
-		*v = append(*v, variable)
-		index = len(*v) - 1
-	}
-	i := strconv.Itoa(index)
-	name = variablePrefixSuffix + i + variablePrefixSuffix
-	return
-}
-
-type VariableKind int
-
-const (
-	VariableKindContext VariableKind = iota + 1
-	VariableKindObject
-	VariableKindHeader
-)
-
-type ContextVariable struct {
-	Path                 []string
-	JsonValueType        jsonparser.ValueType
-	ArrayJsonValueType   jsonparser.ValueType
-	RenderAsArrayCSV     bool
-	RenderAsPlainValue   bool
-	RenderAsGraphQLValue bool
-	OmitObjectKeyQuotes  bool
-	EscapeQuotes         bool
-}
-
-func (c *ContextVariable) SetJsonValueType(operation, definition *ast.Document, typeRef int) {
-	// TODO: check is it reachable
-	if operation.TypeIsList(typeRef) {
-		c.JsonValueType = jsonparser.Array
-		c.ArrayJsonValueType = getJsonValueTypeType(operation, definition, operation.ResolveUnderlyingType(typeRef))
-		return
-	}
-
-	c.JsonValueType = getJsonValueTypeType(operation, definition, typeRef)
-}
-
-func getJsonValueTypeType(operation, definition *ast.Document, typeRef int) jsonparser.ValueType {
-	if operation.TypeIsList(typeRef) {
-		return jsonparser.Array
-	}
-
-	if operation.TypeIsEnum(typeRef, definition) {
-		return jsonparser.String
-	}
-
-	if operation.TypeIsScalar(typeRef, definition) {
-		return getScalarJsonValueTypeType(typeRef, operation)
-	}
-
-	// TODO: this is not checking nested objects, consider using JSON Schema instead
-	return jsonparser.Object
-}
-
-func getScalarJsonValueTypeType(typeRef int, document *ast.Document) jsonparser.ValueType {
-	typeName := document.ResolveTypeNameString(typeRef)
-	switch typeName {
-	case "Boolean":
-		return jsonparser.Boolean
-	case "Int", "Float":
-		return jsonparser.Number
-	case "String", "Date", "ID":
-		return jsonparser.String
-	case "_Any":
-		return jsonparser.Object
-	default:
-		// TODO: this could be wrong in case of custom scalars
-		return jsonparser.String
-	}
-}
-
-func (c *ContextVariable) TemplateSegment() TemplateSegment {
-	return TemplateSegment{
-		SegmentType:                  VariableSegmentType,
-		VariableSource:               VariableSourceContext,
-		VariableSourcePath:           c.Path,
-		VariableValueType:            c.JsonValueType,
-		VariableValueArrayValueType:  c.ArrayJsonValueType,
-		RenderVariableAsArrayCSV:     c.RenderAsArrayCSV,
-		RenderVariableAsPlainValue:   c.RenderAsPlainValue,
-		RenderVariableAsGraphQLValue: c.RenderAsGraphQLValue,
-		OmitObjectKeyQuotes:          c.OmitObjectKeyQuotes,
-		EscapeQuotes:                 c.EscapeQuotes,
-	}
-}
-
-func (c *ContextVariable) Equals(another Variable) bool {
-	if another == nil {
-		return false
-	}
-	if another.VariableKind() != c.VariableKind() {
-		return false
-	}
-	anotherContextVariable := another.(*ContextVariable)
-	if len(c.Path) != len(anotherContextVariable.Path) {
-		return false
-	}
-	for i := range c.Path {
-		if c.Path[i] != anotherContextVariable.Path[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func (_ *ContextVariable) VariableKind() VariableKind {
-	return VariableKindContext
-}
-
-type ObjectVariable struct {
-	Path                 []string
-	JsonValueType        jsonparser.ValueType
-	ArrayJsonValueType   jsonparser.ValueType
-	RenderAsGraphQLValue bool
-	RenderAsPlainValue   bool
-	RenderAsArrayCSV     bool
-	OmitObjectKeyQuotes  bool
-	EscapeQuotes         bool
-}
-
-func (o *ObjectVariable) SetJsonValueType(definition *ast.Document, typeRef int) {
-	// TODO: check is it reachable
-	if definition.TypeIsList(typeRef) {
-		o.JsonValueType = jsonparser.Array
-		o.ArrayJsonValueType = getJsonValueTypeType(definition, definition, definition.ResolveUnderlyingType(typeRef))
-		return
-	}
-
-	o.JsonValueType = getJsonValueTypeType(definition, definition, typeRef)
-}
-
-func (o *ObjectVariable) TemplateSegment() TemplateSegment {
-	return TemplateSegment{
-		SegmentType:                  VariableSegmentType,
-		VariableSource:               VariableSourceObject,
-		VariableSourcePath:           o.Path,
-		VariableValueType:            o.JsonValueType,
-		VariableValueArrayValueType:  o.ArrayJsonValueType,
-		RenderVariableAsArrayCSV:     o.RenderAsArrayCSV,
-		RenderVariableAsPlainValue:   o.RenderAsPlainValue,
-		RenderVariableAsGraphQLValue: o.RenderAsGraphQLValue,
-		OmitObjectKeyQuotes:          o.OmitObjectKeyQuotes,
-		EscapeQuotes:                 o.EscapeQuotes,
-	}
-}
-
-func (o *ObjectVariable) Equals(another Variable) bool {
-	if another == nil {
-		return false
-	}
-	if another.VariableKind() != o.VariableKind() {
-		return false
-	}
-	anotherObjectVariable := another.(*ObjectVariable)
-	if len(o.Path) != len(anotherObjectVariable.Path) {
-		return false
-	}
-	for i := range o.Path {
-		if o.Path[i] != anotherObjectVariable.Path[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func (o *ObjectVariable) VariableKind() VariableKind {
-	return VariableKindObject
-}
-
-type HeaderVariable struct {
-	Path []string
-}
-
-func (h *HeaderVariable) TemplateSegment() TemplateSegment {
-	return TemplateSegment{
-		SegmentType:        VariableSegmentType,
-		VariableSource:     VariableSourceRequestHeader,
-		VariableSourcePath: h.Path,
-	}
-}
-
-func (h *HeaderVariable) VariableKind() VariableKind {
-	return VariableKindHeader
-}
-
-func (h *HeaderVariable) Equals(another Variable) bool {
-	if another == nil {
-		return false
-	}
-	if another.VariableKind() != h.VariableKind() {
-		return false
-	}
-	anotherHeaderVariable := another.(*HeaderVariable)
-	if len(h.Path) != len(anotherHeaderVariable.Path) {
-		return false
-	}
-	for i := range h.Path {
-		if h.Path[i] != anotherHeaderVariable.Path[i] {
-			return false
-		}
-	}
-	return true
 }
 
 type GraphQLSubscription struct {

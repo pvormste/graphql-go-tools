@@ -76,7 +76,7 @@ func TestSchema_Normalize(t *testing.T) {
 func TestSchema_HasQueryType(t *testing.T) {
 	run := func(schema string, expectation bool) func(t *testing.T) {
 		return func(t *testing.T) {
-			parsedSchema, err := NewSchemaFromString(schema)
+			parsedSchema, err := createSchema([]byte(schema), false)
 			require.NoError(t, err)
 
 			result := parsedSchema.HasQueryType()
@@ -84,23 +84,25 @@ func TestSchema_HasQueryType(t *testing.T) {
 		}
 	}
 
-	t.Run("should return false when there is no query type present", run(`
+	t.Run("schema without base defition", func(t *testing.T) {
+		t.Run("should return false when there is no query type present", run(`
 				schema {
 					mutation: Mutation
 				}
 				type Mutation {
 					save: Boolean!
 				}`, false),
-	)
+		)
 
-	t.Run("should return true when there is a query type present", run(`
+		t.Run("should return true when there is a query type present", run(`
 				schema {
 					query: Query
 				}
 				type Query {
 					hello: String!
 				}`, true),
-	)
+		)
+	})
 }
 
 func TestSchema_QueryTypeName(t *testing.T) {
@@ -114,13 +116,13 @@ func TestSchema_QueryTypeName(t *testing.T) {
 		}
 	}
 
-	t.Run("should return empty string when no query type is present", run(`
+	t.Run("should return default query name when no query type is present", run(`
 				schema {
 					mutation: Mutation
 				}
 				type Mutation {
 					save: Boolean!
-				}`, ""),
+				}`, "Query"),
 	)
 
 	t.Run("should return 'Query' when there is a query type named 'Query'", run(`
@@ -516,11 +518,31 @@ func TestSchema_GetAllNestedFieldChildrenFromTypeField(t *testing.T) {
 		expectedTypeFields := []TypeFields{
 			{
 				TypeName:   "WithChildren",
-				FieldNames: []string{"id", "name", "nested"},
+				FieldNames: []string{"id", "name", "nested", "__typename"},
 			},
 			{
 				TypeName:   "Nested",
-				FieldNames: []string{"id", "name"},
+				FieldNames: []string{"id", "name", "__typename"},
+			},
+		}
+
+		assert.Equal(t, expectedTypeFields, typeFields)
+	})
+
+	t.Run("should get field children without skip function on field with interface type", func(t *testing.T) {
+		typeFields := schema.GetAllNestedFieldChildrenFromTypeField("Query", "idType")
+		expectedTypeFields := []TypeFields{
+			{
+				TypeName:   "WithChildren",
+				FieldNames: []string{"id", "name", "nested", "__typename"},
+			},
+			{
+				TypeName:   "Nested",
+				FieldNames: []string{"id", "name", "__typename"},
+			},
+			{
+				TypeName:   "IDType",
+				FieldNames: []string{"id", "__typename"},
 			},
 		}
 
@@ -542,7 +564,7 @@ func TestSchema_GetAllNestedFieldChildrenFromTypeField(t *testing.T) {
 		expectedTypeFields := []TypeFields{
 			{
 				TypeName:   "WithChildren",
-				FieldNames: []string{"id", "name"},
+				FieldNames: []string{"id", "name", "__typename"},
 			},
 		}
 
@@ -557,19 +579,54 @@ func TestSchema_GetAllNestedFieldChildrenFromTypeField(t *testing.T) {
 		expectedTypeFields := []TypeFields{
 			{
 				TypeName:   "Country",
-				FieldNames: []string{"code", "name", "native", "phone", "continent", "capital", "currency", "languages", "emoji", "emojiU", "states"},
+				FieldNames: []string{"code", "name", "native", "phone", "continent", "capital", "currency", "languages", "emoji", "emojiU", "states", "__typename"},
 			},
 			{
 				TypeName:   "Continent",
-				FieldNames: []string{"code", "name", "countries"},
+				FieldNames: []string{"code", "name", "countries", "__typename"},
 			},
 			{
 				TypeName:   "Language",
-				FieldNames: []string{"code", "name", "native", "rtl"},
+				FieldNames: []string{"code", "name", "native", "rtl", "__typename"},
 			},
 			{
 				TypeName:   "State",
-				FieldNames: []string{"code", "name", "country"},
+				FieldNames: []string{"code", "name", "country", "__typename"},
+			},
+		}
+
+		assert.Equal(t, expectedTypeFields, typeFields)
+	})
+
+	t.Run("should get field children from schema with recursive references on field with interface type", func(t *testing.T) {
+		schema, err = NewSchemaFromString(countriesSchema)
+		require.NoError(t, err)
+
+		typeFields := schema.GetAllNestedFieldChildrenFromTypeField("Query", "codeType")
+		expectedTypeFields := []TypeFields{
+			{
+				TypeName:   "Continent",
+				FieldNames: []string{"code", "name", "countries", "__typename"},
+			},
+			{
+				TypeName:   "Country",
+				FieldNames: []string{"code", "name", "native", "phone", "continent", "capital", "currency", "languages", "emoji", "emojiU", "states", "__typename"},
+			},
+			{
+				TypeName:   "Language",
+				FieldNames: []string{"code", "name", "native", "rtl", "__typename"},
+			},
+			{
+				TypeName:   "State",
+				FieldNames: []string{"code", "name", "country", "__typename"},
+			},
+			{
+				TypeName:   "CodeNameType",
+				FieldNames: []string{"code", "name", "__typename"},
+			},
+			{
+				TypeName:   "CodeType",
+				FieldNames: []string{"code", "__typename"},
 			},
 		}
 
@@ -588,19 +645,24 @@ type Query {
 	withChildren: WithChildren
 	singleArgLevel1(lvl: int): SingleArgLevel1
 	_entities(representations: [_Any!]!): [_Entity]!
+	idType: IDType!
 }
 
 extend type Query {
 	multiArgLevel1(lvl: int, number: int): MultiArgLevel1
 }
 
-type WithChildren { 
+interface IDType {
+	id: ID!
+}
+
+type WithChildren implements IDType { 
 	id: ID!
 	name: String
 	nested: Nested
-} 
+}
 
-type Nested { 
+type Nested implements IDType { 
 	id: ID! 
 	name: String! 
 } 
@@ -619,12 +681,21 @@ schema {
 	query: Query
 }
 
+interface CodeType {
+	code: ID!
+}
+
+interface CodeNameType implements CodeType {
+	code: ID!
+	name: String!
+}
+
 enum CacheControlScope {
   PUBLIC
   PRIVATE
 }
 
-type Continent {
+type Continent implements CodeNameType & CodeType {
   code: ID!
   name: String!
   countries: [Country!]!
@@ -634,7 +705,7 @@ input ContinentFilterInput {
   code: StringQueryOperatorInput
 }
 
-type Country {
+type Country implements CodeNameType & CodeType {
   code: ID!
   name: String!
   native: String!
@@ -672,6 +743,7 @@ type Query {
   country(code: ID!): Country
   languages(filter: LanguageFilterInput): [Language!]!
   language(code: ID!): Language
+  codeType: CodeType!
 }
 
 type State {

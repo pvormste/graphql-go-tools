@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	defaultInrospectionQueryName = "IntrospectionQuery"
-	schemaFieldName              = "__schema"
+	schemaIntrospectionFieldName = "__schema"
+	typeIntrospectionFieldName   = "__type"
 )
 
 type OperationType ast.OperationType
@@ -114,20 +114,36 @@ func (r *Request) IsIntrospectionQuery() (result bool, err error) {
 		return false, report
 	}
 
-	if r.OperationName == defaultInrospectionQueryName {
-		return true, nil
+	var operationDefinitionRef = ast.InvalidRef
+	var possibleOperationDefinitionRefs = make([]int, 0)
+
+	for i := 0; i < len(r.document.RootNodes); i++ {
+		if r.document.RootNodes[i].Kind == ast.NodeKindOperationDefinition {
+			possibleOperationDefinitionRefs = append(possibleOperationDefinitionRefs, r.document.RootNodes[i].Ref)
+		}
 	}
 
-	if len(r.document.RootNodes) == 0 {
+	if len(possibleOperationDefinitionRefs) == 0 {
+		return
+	} else if len(possibleOperationDefinitionRefs) == 1 {
+		operationDefinitionRef = possibleOperationDefinitionRefs[0]
+	} else {
+		for i := 0; i < len(possibleOperationDefinitionRefs); i++ {
+			ref := possibleOperationDefinitionRefs[i]
+			name := r.document.OperationDefinitionNameString(ref)
+
+			if r.OperationName == name {
+				operationDefinitionRef = ref
+				break
+			}
+		}
+	}
+
+	if operationDefinitionRef == ast.InvalidRef {
 		return
 	}
 
-	rootNode := r.document.RootNodes[0]
-	if rootNode.Kind != ast.NodeKindOperationDefinition {
-		return
-	}
-
-	operationDef := r.document.OperationDefinitions[rootNode.Ref]
+	operationDef := r.document.OperationDefinitions[operationDefinitionRef]
 	if operationDef.OperationType != ast.OperationTypeQuery {
 		return
 	}
@@ -140,12 +156,22 @@ func (r *Request) IsIntrospectionQuery() (result bool, err error) {
 		return
 	}
 
-	selection := r.document.Selections[selectionSet.SelectionRefs[0]]
-	if selection.Kind != ast.SelectionKindField {
-		return
+	for i := 0; i < len(selectionSet.SelectionRefs); i++ {
+		selection := r.document.Selections[selectionSet.SelectionRefs[i]]
+		if selection.Kind != ast.SelectionKindField {
+			continue
+		}
+
+		fieldName := r.document.FieldNameUnsafeString(selection.Ref)
+		switch fieldName {
+		case schemaIntrospectionFieldName, typeIntrospectionFieldName:
+			continue
+		default:
+			return
+		}
 	}
 
-	return r.document.FieldNameUnsafeString(selection.Ref) == schemaFieldName, nil
+	return true, nil
 }
 
 func (r *Request) OperationType() (OperationType, error) {

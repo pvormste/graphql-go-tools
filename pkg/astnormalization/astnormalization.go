@@ -86,12 +86,6 @@ func NormalizeNamedOperation(operation, definition *ast.Document, operationName 
 	normalizer.NormalizeNamedOperation(operation, definition, operationName, report)
 }
 
-type registerNormalizeFunc func(walker *astvisitor.Walker)
-
-type registerNormalizeVariablesFunc func(walker *astvisitor.Walker) *variablesExtractionVisitor
-
-type registerNormalizeDeleteVariablesFunc func(walker *astvisitor.Walker) *deleteUnusedVariablesVisitor
-
 // OperationNormalizer walks a given AST and applies all registered rules
 type OperationNormalizer struct {
 	operationWalkers     []*astvisitor.Walker
@@ -168,21 +162,25 @@ func (o *OperationNormalizer) setupOperationWalkers() {
 	fragmentSpreadInline(&fragmentInline)
 	directiveIncludeSkip(&fragmentInline)
 
+	extractVariablesWalker := astvisitor.NewWalker(48)
+	if o.options.extractVariables {
+		o.variablesExtraction = extractVariables(&extractVariablesWalker)
+	}
+
 	other := astvisitor.NewWalker(48)
+	inputCoercionForList(&other)
 	removeSelfAliasing(&other)
 	mergeInlineFragments(&other)
 	mergeFieldSelections(&other)
 	deduplicateFields(&other)
-	if o.options.extractVariables {
-		o.variablesExtraction = extractVariables(&other)
-	}
+	extractVariablesDefaultValue(&other)
 	if o.options.removeFragmentDefinitions {
 		removeFragmentDefinitions(&other)
 	}
 	if o.options.removeUnusedVariables {
 		deleteUnusedVariables(&other)
 	}
-	o.operationWalkers = append(o.operationWalkers, &fragmentInline, &other)
+	o.operationWalkers = append(o.operationWalkers, &fragmentInline, &extractVariablesWalker, &other)
 }
 
 func (o *OperationNormalizer) prepareDefinition(definition *ast.Document, report *operationreport.Report) {

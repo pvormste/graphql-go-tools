@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"regexp"
 	"strings"
@@ -30,6 +31,65 @@ type Configuration struct {
 	DefaultFlushIntervalMillis int64
 	DataSources                []DataSourceConfiguration
 	Fields                     FieldConfigurations
+	Types                      TypeConfigurations
+}
+
+type DirectiveConfigurations []DirectiveConfiguration
+
+func (d *DirectiveConfigurations) RenameTypeNameOnMatchStr(directiveName string) string {
+	for i := range *d {
+		if (*d)[i].DirectiveName == directiveName {
+			return (*d)[i].RenameTo
+		}
+	}
+	return directiveName
+}
+
+func (d *DirectiveConfigurations) RenameTypeNameOnMatchBytes(directiveName []byte) []byte {
+	str := string(directiveName)
+	for i := range *d {
+		if (*d)[i].DirectiveName == str {
+			return []byte((*d)[i].RenameTo)
+		}
+	}
+	return directiveName
+}
+
+type DirectiveConfiguration struct {
+	DirectiveName string
+	RenameTo      string
+}
+
+type TypeConfigurations []TypeConfiguration
+
+func (t *TypeConfigurations) RenameTypeNameOnMatchStr(typeName string) string {
+	for i := range *t {
+		if (*t)[i].TypeName == typeName {
+			return (*t)[i].RenameTo
+		}
+	}
+	return typeName
+}
+
+func (t *TypeConfigurations) RenameTypeNameOnMatchBytes(typeName []byte) []byte {
+	str := string(typeName)
+	for i := range *t {
+		if (*t)[i].TypeName == str {
+			return []byte((*t)[i].RenameTo)
+		}
+	}
+	return typeName
+}
+
+type TypeConfiguration struct {
+	TypeName string
+	// RenameTo modifies the TypeName
+	// so that a downstream Operation can contain a different TypeName than the upstream Schema
+	// e.g. if the downstream Operation contains { ... on Human_api { height } }
+	// the upstream Operation can be rewritten to { ... on Human { height }}
+	// by setting RenameTo to Human
+	// This way, Types can be suffixed / renamed in downstream Schemas while keeping the contract with the upstream ok
+	RenameTo string
 }
 
 type FieldConfigurations []FieldConfiguration
@@ -44,12 +104,19 @@ func (f FieldConfigurations) ForTypeField(typeName, fieldName string) *FieldConf
 }
 
 type FieldConfiguration struct {
-	TypeName              string
-	FieldName             string
+	TypeName  string
+	FieldName string
+	// DisableDefaultMapping - instructs planner whether to use path mapping coming from Path field
 	DisableDefaultMapping bool
-	Path                  []string
-	Arguments             ArgumentsConfigurations
-	RequiresFields        []string
+	// Path - represents a json path to lookup for a field value in response json
+	Path           []string
+	Arguments      ArgumentsConfigurations
+	RequiresFields []string
+	// UnescapeResponseJson set to true will allow fields (String,List,Object)
+	// to be resolved from an escaped JSON string
+	// e.g. {"response":"{\"foo\":\"bar\"}"} will be returned as {"foo":"bar"} when path is "response"
+	// This way, it is possible to resolve a JSON string as part of the response without extra String encoding of the JSON
+	UnescapeResponseJson bool
 }
 
 type ArgumentsConfigurations []ArgumentConfiguration
@@ -72,6 +139,7 @@ const (
 	RenderArgumentDefault        ArgumentRenderConfig = ""
 	RenderArgumentAsArrayCSV     ArgumentRenderConfig = "render_argument_as_array_csv"
 	RenderArgumentAsGraphQLValue ArgumentRenderConfig = "render_argument_as_graphql_value"
+	RenderArgumentAsJSONValue    ArgumentRenderConfig = "render_argument_as_json_value"
 )
 
 type ArgumentConfiguration struct {
@@ -82,8 +150,15 @@ type ArgumentConfiguration struct {
 }
 
 type DataSourceConfiguration struct {
-	RootNodes  []TypeField
+	// RootNodes - defines the nodes where the responsibility of the DataSource begins
+	// When you enter a node and it is not a child node
+	// when you have entered into a field which representing data source - it means that we starting a new planning stage
+	RootNodes []TypeField
+	// ChildNodes - describes additional fields which will be requested along with fields which has a datasources
+	// They are always required for the Graphql datasources cause each field could have it's own datasource
+	// For any single point datasource like HTTP/REST or GRPC we could not request less fields, as we always get a full response
 	ChildNodes []TypeField
+	Directives DirectiveConfigurations
 	Factory    PlannerFactory
 	Custom     json.RawMessage
 }
@@ -219,11 +294,12 @@ func (p *Planner) Plan(operation, definition *ast.Document, operationName string
 	p.planningWalker.RegisterFieldVisitor(p.planningVisitor)
 	p.planningWalker.RegisterSelectionSetVisitor(p.planningVisitor)
 	p.planningWalker.RegisterEnterDirectiveVisitor(p.planningVisitor)
+	p.planningWalker.RegisterInlineFragmentVisitor(p.planningVisitor)
 
 	for key := range p.planningVisitor.planners {
-		custom := p.planningVisitor.planners[key].dataSourceConfiguration.Custom
+		config := p.planningVisitor.planners[key].dataSourceConfiguration
 		isNested := p.planningVisitor.planners[key].isNestedPlanner()
-		err := p.planningVisitor.planners[key].planner.Register(p.planningVisitor, custom, isNested)
+		err := p.planningVisitor.planners[key].planner.Register(p.planningVisitor, config, isNested)
 		if err != nil {
 			p.planningWalker.StopWithInternalErr(err)
 		}
@@ -295,6 +371,15 @@ type Visitor struct {
 	fieldBuffers          map[int]int
 	skipFieldPaths        []string
 	fieldConfigs          map[int]*FieldConfiguration
+	exportedVariables     map[string]struct{}
+	skipIncludeFields     map[int]skipIncludeField
+}
+
+type skipIncludeField struct {
+	skip                bool
+	skipVariableName    string
+	include             bool
+	includeVariableName string
 }
 
 type objectFields struct {
@@ -303,12 +388,13 @@ type objectFields struct {
 }
 
 type objectFetchConfiguration struct {
-	object         *resolve.Object
-	trigger        *resolve.GraphQLSubscriptionTrigger
-	planner        DataSourcePlanner
-	bufferID       int
-	isSubscription bool
-	fieldRef       int
+	object             *resolve.Object
+	trigger            *resolve.GraphQLSubscriptionTrigger
+	planner            DataSourcePlanner
+	bufferID           int
+	isSubscription     bool
+	fieldRef           int
+	fieldDefinitionRef int
 }
 
 func (v *Visitor) AllowVisitor(kind astvisitor.VisitorKind, ref int, visitor interface{}) bool {
@@ -365,7 +451,7 @@ func (v *Visitor) EnterDirective(ref int) {
 			initialBatchSize := 0
 			if value, ok := v.Operation.DirectiveArgumentValueByName(ref, literal.INITIAL_BATCH_SIZE); ok {
 				if value.Kind == ast.ValueKindInteger {
-					initialBatchSize = int(v.Operation.IntValueAsInt(value.Ref))
+					initialBatchSize = int(v.Operation.IntValueAsInt32(value.Ref))
 				}
 			}
 			v.currentField.Stream = &resolve.StreamField{
@@ -377,11 +463,39 @@ func (v *Visitor) EnterDirective(ref int) {
 	}
 }
 
-func (v *Visitor) LeaveSelectionSet(ref int) {
+func (v *Visitor) EnterInlineFragment(ref int) {
+	directives := v.Operation.InlineFragments[ref].Directives.Refs
+	skip, skipVariableName := v.resolveSkip(directives)
+	include, includeVariableName := v.resolveInclude(directives)
+	set := v.Operation.InlineFragments[ref].SelectionSet
+	if set == -1 {
+		return
+	}
+	for _, selection := range v.Operation.SelectionSets[set].SelectionRefs {
+		switch v.Operation.Selections[selection].Kind {
+		case ast.SelectionKindField:
+			ref := v.Operation.Selections[selection].Ref
+			if skip || include {
+				v.skipIncludeFields[ref] = skipIncludeField{
+					skip:                skip,
+					skipVariableName:    skipVariableName,
+					include:             include,
+					includeVariableName: includeVariableName,
+				}
+			}
+		}
+	}
+}
+
+func (v *Visitor) LeaveInlineFragment(ref int) {
 
 }
 
 func (v *Visitor) EnterSelectionSet(ref int) {
+
+}
+
+func (v *Visitor) LeaveSelectionSet(ref int) {
 
 }
 
@@ -391,6 +505,9 @@ func (v *Visitor) EnterField(ref int) {
 		return
 	}
 
+	skip, skipVariableName := v.resolveSkipForField(ref)
+	include, includeVariableName := v.resolveIncludeForField(ref)
+
 	fieldName := v.Operation.FieldNameBytes(ref)
 	fieldAliasOrName := v.Operation.FieldAliasOrNameBytes(ref)
 	if bytes.Equal(fieldName, literal.TYPENAME) {
@@ -398,19 +515,23 @@ func (v *Visitor) EnterField(ref int) {
 			Name: fieldAliasOrName,
 			Value: &resolve.String{
 				Nullable: false,
-				Path:     v.resolveFieldPath(ref),
+				Path:     []string{"__typename"},
 			},
 			OnTypeName: v.resolveOnTypeName(),
 			Position: resolve.Position{
 				Line:   v.Operation.Fields[ref].Position.LineStart,
 				Column: v.Operation.Fields[ref].Position.CharStart,
 			},
+			SkipDirectiveDefined:    skip,
+			SkipVariableName:        skipVariableName,
+			IncludeDirectiveDefined: include,
+			IncludeVariableName:     includeVariableName,
 		}
 		*v.currentFields[len(v.currentFields)-1].fields = append(*v.currentFields[len(v.currentFields)-1].fields, v.currentField)
 		return
 	}
 
-	fieldDefinition, ok := v.Walker.FieldDefinitionWithExists(ref)
+	fieldDefinition, ok := v.Walker.FieldDefinition(ref)
 	if !ok {
 		return
 	}
@@ -439,9 +560,10 @@ func (v *Visitor) EnterField(ref int) {
 	path := v.resolveFieldPath(ref)
 	fieldDefinitionType := v.Definition.FieldDefinitionType(fieldDefinition)
 	bufferID, hasBuffer := v.fieldBuffers[ref]
+
 	v.currentField = &resolve.Field{
 		Name:       fieldAliasOrName,
-		Value:      v.resolveFieldValue(ref, fieldDefinitionType, true, path),
+		Value:      v.resolveFieldValue(ref, fieldDefinitionType, true, path, false),
 		HasBuffer:  hasBuffer,
 		BufferID:   bufferID,
 		OnTypeName: v.resolveOnTypeName(),
@@ -449,6 +571,10 @@ func (v *Visitor) EnterField(ref int) {
 			Line:   v.Operation.Fields[ref].Position.LineStart,
 			Column: v.Operation.Fields[ref].Position.CharStart,
 		},
+		SkipDirectiveDefined:    skip,
+		SkipVariableName:        skipVariableName,
+		IncludeDirectiveDefined: include,
+		IncludeVariableName:     includeVariableName,
 	}
 
 	*v.currentFields[len(v.currentFields)-1].fields = append(*v.currentFields[len(v.currentFields)-1].fields, v.currentField)
@@ -462,6 +588,50 @@ func (v *Visitor) EnterField(ref int) {
 	v.fieldConfigs[ref] = fieldConfig
 }
 
+func (v *Visitor) resolveSkipForField(ref int) (bool, string) {
+	skipInclude, ok := v.skipIncludeFields[ref]
+	if ok {
+		return skipInclude.skip, skipInclude.skipVariableName
+	}
+	return v.resolveSkip(v.Operation.Fields[ref].Directives.Refs)
+}
+
+func (v *Visitor) resolveIncludeForField(ref int) (bool, string) {
+	skipInclude, ok := v.skipIncludeFields[ref]
+	if ok {
+		return skipInclude.include, skipInclude.includeVariableName
+	}
+	return v.resolveInclude(v.Operation.Fields[ref].Directives.Refs)
+}
+
+func (v *Visitor) resolveSkip(directiveRefs []int) (bool, string) {
+	for _, i := range directiveRefs {
+		if v.Operation.DirectiveNameString(i) != "skip" {
+			continue
+		}
+		if value, ok := v.Operation.DirectiveArgumentValueByName(i, literal.IF); ok {
+			if value.Kind == ast.ValueKindVariable {
+				return true, v.Operation.VariableValueNameString(value.Ref)
+			}
+		}
+	}
+	return false, ""
+}
+
+func (v *Visitor) resolveInclude(directiveRefs []int) (bool, string) {
+	for _, i := range directiveRefs {
+		if v.Operation.DirectiveNameString(i) != "include" {
+			continue
+		}
+		if value, ok := v.Operation.DirectiveArgumentValueByName(i, literal.IF); ok {
+			if value.Kind == ast.ValueKindVariable {
+				return true, v.Operation.VariableValueNameString(value.Ref)
+			}
+		}
+	}
+	return false, ""
+}
+
 func (v *Visitor) resolveOnTypeName() []byte {
 	if len(v.Walker.Ancestors) < 2 {
 		return nil
@@ -470,14 +640,15 @@ func (v *Visitor) resolveOnTypeName() []byte {
 	if inlineFragment.Kind != ast.NodeKindInlineFragment {
 		return nil
 	}
-	return v.Operation.InlineFragmentTypeConditionName(inlineFragment.Ref)
+	typeName := v.Operation.InlineFragmentTypeConditionName(inlineFragment.Ref)
+	return v.Config.Types.RenameTypeNameOnMatchBytes(typeName)
 }
 
 func (v *Visitor) LeaveField(ref int) {
 	if v.currentFields[len(v.currentFields)-1].popOnField == ref {
 		v.currentFields = v.currentFields[:len(v.currentFields)-1]
 	}
-	fieldDefinition, ok := v.Walker.FieldDefinitionWithExists(ref)
+	fieldDefinition, ok := v.Walker.FieldDefinition(ref)
 	if !ok {
 		return
 	}
@@ -498,17 +669,27 @@ func (v *Visitor) skipField(ref int) bool {
 	return false
 }
 
-func (v *Visitor) resolveFieldValue(fieldRef, typeRef int, nullable bool, path []string) resolve.Node {
+func (v *Visitor) resolveFieldValue(fieldRef, typeRef int, nullable bool, path []string, isList bool) resolve.Node {
 	ofType := v.Definition.Types[typeRef].OfType
+
+	fieldName := v.Operation.FieldNameString(fieldRef)
+	enclosingTypeName := v.Walker.EnclosingTypeDefinition.NameString(v.Definition)
+	fieldConfig := v.Config.Fields.ForTypeField(enclosingTypeName, fieldName)
+	unescapeResponseJson := false
+	if !isList && fieldConfig != nil {
+		unescapeResponseJson = fieldConfig.UnescapeResponseJson
+	}
+
 	switch v.Definition.Types[typeRef].TypeKind {
 	case ast.TypeKindNonNull:
-		return v.resolveFieldValue(fieldRef, ofType, false, path)
+		return v.resolveFieldValue(fieldRef, ofType, false, path, false)
 	case ast.TypeKindList:
-		listItem := v.resolveFieldValue(fieldRef, ofType, true, nil)
+		listItem := v.resolveFieldValue(fieldRef, ofType, true, nil, true)
 		return &resolve.Array{
-			Nullable: nullable,
-			Path:     path,
-			Item:     listItem,
+			Nullable:             nullable,
+			Path:                 path,
+			Item:                 listItem,
+			UnescapeResponseJson: unescapeResponseJson,
 		}
 	case ast.TypeKindNamed:
 		typeName := v.Definition.ResolveTypeNameString(typeRef)
@@ -518,43 +699,53 @@ func (v *Visitor) resolveFieldValue(fieldRef, typeRef int, nullable bool, path [
 		}
 		switch typeDefinitionNode.Kind {
 		case ast.NodeKindScalarTypeDefinition:
+			fieldExport := v.resolveFieldExport(fieldRef)
 			switch typeName {
 			case "String":
 				return &resolve.String{
-					Path:     path,
-					Nullable: nullable,
+					Path:                 path,
+					Nullable:             nullable,
+					Export:               fieldExport,
+					UnescapeResponseJson: unescapeResponseJson,
 				}
 			case "Boolean":
 				return &resolve.Boolean{
 					Path:     path,
 					Nullable: nullable,
+					Export:   fieldExport,
 				}
 			case "Int":
 				return &resolve.Integer{
 					Path:     path,
 					Nullable: nullable,
+					Export:   fieldExport,
 				}
 			case "Float":
 				return &resolve.Float{
 					Path:     path,
 					Nullable: nullable,
+					Export:   fieldExport,
 				}
 			default:
 				return &resolve.String{
-					Path:     path,
-					Nullable: nullable,
+					Path:                 path,
+					Nullable:             nullable,
+					Export:               fieldExport,
+					UnescapeResponseJson: unescapeResponseJson,
 				}
 			}
 		case ast.NodeKindEnumTypeDefinition:
 			return &resolve.String{
-				Path:     path,
-				Nullable: nullable,
+				Path:                 path,
+				Nullable:             nullable,
+				UnescapeResponseJson: unescapeResponseJson,
 			}
 		case ast.NodeKindObjectTypeDefinition, ast.NodeKindInterfaceTypeDefinition, ast.NodeKindUnionTypeDefinition:
 			object := &resolve.Object{
-				Nullable: nullable,
-				Path:     path,
-				Fields:   []*resolve.Field{},
+				Nullable:             nullable,
+				Path:                 path,
+				Fields:               []*resolve.Field{},
+				UnescapeResponseJson: unescapeResponseJson,
 			}
 			v.objects = append(v.objects, object)
 			v.Walker.Defer(func() {
@@ -569,6 +760,79 @@ func (v *Visitor) resolveFieldValue(fieldRef, typeRef int, nullable bool, path [
 		}
 	default:
 		return &resolve.Null{}
+	}
+}
+
+func (v *Visitor) resolveFieldExport(fieldRef int) *resolve.FieldExport {
+	if !v.Operation.Fields[fieldRef].HasDirectives {
+		return nil
+	}
+	exportAs := ""
+	for _, ref := range v.Operation.Fields[fieldRef].Directives.Refs {
+		if v.Operation.Input.ByteSliceString(v.Operation.Directives[ref].Name) == "export" {
+			value, ok := v.Operation.DirectiveArgumentValueByName(ref, []byte("as"))
+			if !ok {
+				continue
+			}
+			if value.Kind != ast.ValueKindString {
+				continue
+			}
+			exportAs = v.Operation.StringValueContentString(value.Ref)
+		}
+	}
+	if exportAs == "" {
+		return nil
+	}
+	variableDefinition, ok := v.Operation.VariableDefinitionByNameAndOperation(v.Walker.Ancestors[0].Ref, []byte(exportAs))
+	if !ok {
+		return nil
+	}
+	v.exportedVariables[exportAs] = struct{}{}
+	typeName := v.Operation.ResolveTypeNameString(v.Operation.VariableDefinitions[variableDefinition].Type)
+	if typeName == "String" {
+		return &resolve.FieldExport{
+			Path:     []string{exportAs},
+			AsString: true,
+		}
+	}
+	return &resolve.FieldExport{
+		Path: []string{exportAs},
+	}
+}
+
+func (v *Visitor) fieldRequiresExportedVariable(fieldRef int) bool {
+	for _, arg := range v.Operation.Fields[fieldRef].Arguments.Refs {
+		if v.valueRequiresExportedVariable(v.Operation.Arguments[arg].Value) {
+			return true
+		}
+	}
+	return false
+}
+
+func (v *Visitor) valueRequiresExportedVariable(value ast.Value) bool {
+	switch value.Kind {
+	case ast.ValueKindVariable:
+		name := v.Operation.VariableValueNameString(value.Ref)
+		if _, ok := v.exportedVariables[name]; ok {
+			return true
+		}
+		return false
+	case ast.ValueKindList:
+		for _, ref := range v.Operation.ListValues[value.Ref].Refs {
+			if v.valueRequiresExportedVariable(v.Operation.Values[ref]) {
+				return true
+			}
+		}
+		return false
+	case ast.ValueKindObject:
+		for _, ref := range v.Operation.ObjectValues[value.Ref].Refs {
+			if v.valueRequiresExportedVariable(v.Operation.ObjectFieldValue(ref)) {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
 	}
 }
 
@@ -660,6 +924,8 @@ func (v *Visitor) resolveFieldPath(ref int) []string {
 func (v *Visitor) EnterDocument(operation, definition *ast.Document) {
 	v.Operation, v.Definition = operation, definition
 	v.fieldConfigs = map[int]*FieldConfiguration{}
+	v.exportedVariables = map[string]struct{}{}
+	v.skipIncludeFields = map[int]skipIncludeField{}
 }
 
 func (v *Visitor) LeaveDocument(operation, definition *ast.Document) {
@@ -729,8 +995,8 @@ func (v *Visitor) resolveInputTemplates(config objectFetchConfiguration, input *
 		switch parts[0] {
 		case "object":
 			variable := &resolve.ObjectVariable{
-				Path:               path,
-				RenderAsPlainValue: true,
+				Path:     path,
+				Renderer: resolve.NewPlainVariableRenderer(),
 			}
 			variableName, _ = variables.AddVariable(variable)
 		case "arguments":
@@ -741,7 +1007,18 @@ func (v *Visitor) resolveInputTemplates(config objectFetchConfiguration, input *
 			}
 			value := v.Operation.ArgumentValue(arg)
 			if value.Kind != ast.ValueKindVariable {
-				break
+				inputValueDefinition := -1
+				for _, ref := range v.Definition.FieldDefinitions[config.fieldDefinitionRef].ArgumentsDefinition.Refs {
+					inputFieldName := v.Definition.Input.ByteSliceString(v.Definition.InputValueDefinitions[ref].Name)
+					if inputFieldName == argumentName {
+						inputValueDefinition = ref
+						break
+					}
+				}
+				if inputValueDefinition == -1 {
+					return "null"
+				}
+				return v.renderJSONValueTemplate(value, variables, inputValueDefinition)
 			}
 			variableValue := v.Operation.VariableValueNameString(value.Ref)
 			if !v.Operation.OperationDefinitionHasVariableDefinition(v.operationDefinition, variableValue) {
@@ -755,22 +1032,40 @@ func (v *Visitor) resolveInputTemplates(config objectFetchConfiguration, input *
 				break
 			}
 			variableTypeRef := v.Operation.VariableDefinitions[variableDefinition].Type
-			variable.SetJsonValueType(v.Operation, v.Definition, variableTypeRef)
 
-			variable.RenderAsPlainValue = true
 			if fieldConfig, ok := v.fieldConfigs[config.fieldRef]; ok {
 				if argumentConfig := fieldConfig.Arguments.ForName(argumentName); argumentConfig != nil {
 					switch argumentConfig.RenderConfig {
 					case RenderArgumentAsArrayCSV:
-						variable.RenderAsArrayCSV = true
-						variable.RenderAsPlainValue = false
+						variable.Renderer = resolve.NewCSVVariableRendererFromTypeRef(v.Operation, v.Definition, variableTypeRef)
 					case RenderArgumentDefault:
-						variable.RenderAsPlainValue = true
+						renderer, err := resolve.NewPlainVariableRendererWithValidationFromTypeRef(v.Operation, v.Definition, variableTypeRef)
+						if err != nil {
+							break
+						}
+						variable.Renderer = renderer
 					case RenderArgumentAsGraphQLValue:
-						variable.RenderAsGraphQLValue = true
-						variable.RenderAsPlainValue = false
+						renderer, err := resolve.NewGraphQLVariableRendererFromTypeRef(v.Operation, v.Definition, variableTypeRef)
+						if err != nil {
+							break
+						}
+						variable.Renderer = renderer
+					case RenderArgumentAsJSONValue:
+						renderer, err := resolve.NewJSONVariableRendererWithValidationFromTypeRef(v.Operation, v.Definition, variableTypeRef)
+						if err != nil {
+							break
+						}
+						variable.Renderer = renderer
 					}
 				}
+			}
+
+			if variable.Renderer == nil {
+				renderer, err := resolve.NewPlainVariableRendererWithValidationFromTypeRef(v.Operation, v.Definition, variableTypeRef)
+				if err != nil {
+					break
+				}
+				variable.Renderer = renderer
 			}
 
 			variableName, _ = variables.AddVariable(variable)
@@ -788,6 +1083,61 @@ func (v *Visitor) resolveInputTemplates(config objectFetchConfiguration, input *
 		}
 		return variableName
 	})
+}
+
+func (v *Visitor) renderJSONValueTemplate(value ast.Value, variables *resolve.Variables, inputValueDefinition int) (out string) {
+	switch value.Kind {
+	case ast.ValueKindList:
+		out += "["
+		addComma := false
+		for _, ref := range v.Operation.ListValues[value.Ref].Refs {
+			if addComma {
+				out += ","
+			} else {
+				addComma = true
+			}
+			listValue := v.Operation.Values[ref]
+			out += v.renderJSONValueTemplate(listValue, variables, inputValueDefinition)
+		}
+		out += "]"
+	case ast.ValueKindObject:
+		out += "{"
+		addComma := false
+		for _, ref := range v.Operation.ObjectValues[value.Ref].Refs {
+			fieldName := v.Operation.Input.ByteSlice(v.Operation.ObjectFields[ref].Name)
+			fieldValue := v.Operation.ObjectFields[ref].Value
+			typeName := v.Definition.ResolveTypeNameString(v.Definition.InputValueDefinitions[inputValueDefinition].Type)
+			typeDefinitionNode, ok := v.Definition.Index.FirstNodeByNameStr(typeName)
+			if !ok {
+				continue
+			}
+			objectFieldDefinition, ok := v.Definition.NodeInputFieldDefinitionByName(typeDefinitionNode, fieldName)
+			if !ok {
+				continue
+			}
+			if addComma {
+				out += ","
+			} else {
+				addComma = true
+			}
+			out += fmt.Sprintf("\"%s\":", string(fieldName))
+			out += v.renderJSONValueTemplate(fieldValue, variables, objectFieldDefinition)
+		}
+		out += "}"
+	case ast.ValueKindVariable:
+		variablePath := v.Operation.VariableValueNameString(value.Ref)
+		inputType := v.Definition.InputValueDefinitions[inputValueDefinition].Type
+		renderer, err := resolve.NewJSONVariableRendererWithValidationFromTypeRef(v.Definition, v.Definition, inputType)
+		if err != nil {
+			renderer = resolve.NewJSONVariableRenderer()
+		}
+		variableName, _ := variables.AddVariable(&resolve.ContextVariable{
+			Path:     []string{variablePath},
+			Renderer: renderer,
+		})
+		out += variableName
+	}
+	return
 }
 
 func (v *Visitor) configureSubscription(config objectFetchConfiguration) {
@@ -845,6 +1195,16 @@ func (v *Visitor) configureFetch(internal objectFetchConfiguration, external Fet
 		DisallowSingleFlight:  external.DisallowSingleFlight,
 		DataSourceIdentifier:  []byte(dataSourceType),
 		ProcessResponseConfig: external.ProcessResponseConfig,
+		DisableDataLoader:     external.DisableDataLoader,
+	}
+
+	// if a field depends on an exported variable, data loader needs to be disabled
+	// this is because the data loader will render all input templates before all fields are evaluated
+	// exporting field values into a variable depends on the field being evaluated first
+	// for that reason, if a field depends on an exported variable, data loader needs to be disabled
+	disableDataLoader := v.fieldRequiresExportedVariable(internal.fieldRef)
+	if disableDataLoader {
+		singleFetch.DisableDataLoader = true
 	}
 
 	if !external.BatchConfig.AllowBatch {
@@ -932,7 +1292,7 @@ type DataSourcePlanningBehavior struct {
 }
 
 type DataSourcePlanner interface {
-	Register(visitor *Visitor, customConfiguration json.RawMessage, isNested bool) error
+	Register(visitor *Visitor, configuration DataSourceConfiguration, isNested bool) error
 	ConfigureFetch() FetchConfiguration
 	ConfigureSubscription() SubscriptionConfiguration
 	DataSourcePlanningBehavior() DataSourcePlanningBehavior
@@ -967,10 +1327,14 @@ type SubscriptionConfiguration struct {
 }
 
 type FetchConfiguration struct {
-	Input                 string
-	Variables             resolve.Variables
-	DataSource            resolve.DataSource
-	DisallowSingleFlight  bool
+	Input                string
+	Variables            resolve.Variables
+	DataSource           resolve.DataSource
+	DisallowSingleFlight bool
+	// DisableDataLoader will configure the Resolver to not use DataLoader
+	// If this is set to false, the planner might still decide to override it,
+	// e.g. if a field depends on an exported variable which doesn't work with DataLoader
+	DisableDataLoader     bool
 	ProcessResponseConfig resolve.ProcessResponseConfig
 	BatchConfig           BatchConfig
 }
@@ -1147,11 +1511,16 @@ func (c *configurationVisitor) EnterField(ref int) {
 				},
 				dataSourceConfiguration: config,
 			})
+			fieldDefinition, ok := c.walker.FieldDefinition(ref)
+			if !ok {
+				continue
+			}
 			c.fetches = append(c.fetches, objectFetchConfiguration{
-				bufferID:       bufferID,
-				planner:        planner,
-				isSubscription: isSubscription,
-				fieldRef:       ref,
+				bufferID:           bufferID,
+				planner:            planner,
+				isSubscription:     isSubscription,
+				fieldRef:           ref,
+				fieldDefinitionRef: fieldDefinition,
 			})
 			return
 		}
