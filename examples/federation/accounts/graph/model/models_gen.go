@@ -2,9 +2,43 @@
 
 package model
 
+type AccountType interface {
+	IsAccountType()
+}
+
+type Name struct {
+	First *string `json:"first"`
+	Last  *string `json:"last"`
+}
+
+type PasswordAccount struct {
+	Email string `json:"email"`
+}
+
+func (PasswordAccount) IsAccountType() {}
+func (PasswordAccount) IsEntity()      {}
+
+type SMSAccount struct {
+	Number *string `json:"number"`
+}
+
+func (SMSAccount) IsAccountType() {}
+func (SMSAccount) IsEntity()      {}
+
 type User struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
+	ID        string          `json:"id"`
+	Name      *Name           `json:"name"`
+	Username  *string         `json:"username"`
+	BirthDate *string         `json:"birthDate"`
+	Account   AccountType     `json:"account"`
+	Metadata  []*UserMetadata `json:"metadata"`
+	Ssn       *string         `json:"ssn"`
 }
 
 func (User) IsEntity() {}
+
+type UserMetadata struct {
+	Name        *string `json:"name"`
+	Address     *string `json:"address"`
+	Description *string `json:"description"`
+}

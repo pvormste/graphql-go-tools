@@ -1,8 +1,41 @@
 extend type Query {
     me: User
+    user(id: ID!): User
+}
+
+extend type Mutation {
+    login(
+        username: String!
+        password: String!
+        userId: String
+    ): User
 }
 
 type User @key(fields: "id") {
     id: ID!
-    username: String!
+    name: Name
+    username: String
+    birthDate(locale: String): String
+    account: AccountType
+    metadata: [UserMetadata]
+    ssn: String
+}
+
+type Name {
+    first: String
+    last: String
+}
+
+type PasswordAccount @key(fields: "email") {
+    email: String!
+}
+type SMSAccount @key(fields: "number") {
+    number: String
+}
+union AccountType = PasswordAccount | SMSAccount
+
+type UserMetadata {
+    name: String
+    address: String
+    description: String
 }

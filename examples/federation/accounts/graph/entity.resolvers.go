@@ -5,21 +5,22 @@ package graph
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jensneuse/graphql-go-tools/examples/federation/accounts/graph/generated"
 	"github.com/jensneuse/graphql-go-tools/examples/federation/accounts/graph/model"
 )
 
-func (r *entityResolver) FindUserByID(ctx context.Context, id string) (*model.User, error) {
-	name := "User " + id
-	if id == "1234" {
-		name = "Me"
-	}
+func (r *entityResolver) FindPasswordAccountByEmail(ctx context.Context, email string) (*model.PasswordAccount, error) {
+	panic(fmt.Errorf("not implemented"))
+}
 
-	return &model.User{
-		ID:       id,
-		Username: name,
-	}, nil
+func (r *entityResolver) FindSMSAccountByNumber(ctx context.Context, number *string) (*model.SMSAccount, error) {
+	panic(fmt.Errorf("not implemented"))
+}
+
+func (r *entityResolver) FindUserByID(ctx context.Context, id string) (*model.User, error) {
+	return nil, nil
 }
 
 // Entity returns generated.EntityResolver implementation.

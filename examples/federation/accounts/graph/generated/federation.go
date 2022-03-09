@@ -39,6 +39,34 @@ func (ec *executionContext) __resolve_entities(ctx context.Context, representati
 		}
 		switch typeName {
 
+		case "PasswordAccount":
+			id0, err := ec.unmarshalNString2string(ctx, rep["email"])
+			if err != nil {
+				return nil, errors.New(fmt.Sprintf("Field %s undefined in schema.", "email"))
+			}
+
+			entity, err := ec.resolvers.Entity().FindPasswordAccountByEmail(ctx,
+				id0)
+			if err != nil {
+				return nil, err
+			}
+
+			list = append(list, entity)
+
+		case "SMSAccount":
+			id0, err := ec.unmarshalOString2ᚖstring(ctx, rep["number"])
+			if err != nil {
+				return nil, errors.New(fmt.Sprintf("Field %s undefined in schema.", "number"))
+			}
+
+			entity, err := ec.resolvers.Entity().FindSMSAccountByNumber(ctx,
+				id0)
+			if err != nil {
+				return nil, err
+			}
+
+			list = append(list, entity)
+
 		case "User":
 			id0, err := ec.unmarshalNID2string(ctx, rep["id"])
 			if err != nil {
