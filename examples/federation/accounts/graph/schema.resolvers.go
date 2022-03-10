@@ -5,14 +5,21 @@ package graph
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/jensneuse/graphql-go-tools/examples/federation/accounts/graph/generated"
 	"github.com/jensneuse/graphql-go-tools/examples/federation/accounts/graph/model"
 )
 
-func (r *mutationResolver) Login(ctx context.Context, username string, password string, userID *string) (*model.User, error) {
-	panic(fmt.Errorf("not implemented"))
+func (r *mutationResolver) Login(ctx context.Context, username string, password string) (*model.User, error) {
+	for _, u := range users {
+		if u.Username == nil || *u.Username != username {
+			continue
+		}
+
+		return &u, nil
+	}
+
+	return nil, nil
 }
 
 func (r *queryResolver) Me(ctx context.Context) (*model.User, error) {

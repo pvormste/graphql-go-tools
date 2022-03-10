@@ -7,7 +7,6 @@ extend type Mutation {
     login(
         username: String!
         password: String!
-        userId: String
     ): User
 }
 
