@@ -28,11 +28,40 @@ func (r *queryResolver) User(ctx context.Context, id string) (*model.User, error
 	return &user, nil
 }
 
+func (r *userResolver) Metadata(ctx context.Context, obj *model.User) ([]*model.UserMetadata, error) {
+	if obj == nil {
+		return nil, nil
+	}
+
+	for _, metadataEntity := range userMetadataDB {
+		if metadataEntity.ID != obj.ID {
+			continue
+		}
+
+		userMetadataResult := make([]*model.UserMetadata, len(metadataEntity.Metadata))
+		for i, m := range metadataEntity.Metadata {
+			userMetadataResult[i] = &model.UserMetadata{
+				Name:        m.Name,
+				Address:     m.Address,
+				Description: m.Description,
+			}
+		}
+
+		return userMetadataResult, nil
+	}
+
+	return nil, nil
+}
+
 // Mutation returns generated.MutationResolver implementation.
 func (r *Resolver) Mutation() generated.MutationResolver { return &mutationResolver{r} }
 
 // Query returns generated.QueryResolver implementation.
 func (r *Resolver) Query() generated.QueryResolver { return &queryResolver{r} }
 
+// User returns generated.UserResolver implementation.
+func (r *Resolver) User() generated.UserResolver { return &userResolver{r} }
+
 type mutationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
+type userResolver struct{ *Resolver }

@@ -4,6 +4,34 @@ import (
 	"github.com/jensneuse/graphql-go-tools/examples/federation/accounts/graph/model"
 )
 
+type UserMetadataDBEntity struct {
+	ID       string
+	Metadata []model.UserMetadata
+}
+
+var userMetadataDB = []UserMetadataDBEntity{
+	{
+		ID: "1",
+		Metadata: []model.UserMetadata{
+			{
+				Name:        stringPtr("meta1"),
+				Address:     stringPtr("1"),
+				Description: stringPtr("2"),
+			},
+		},
+	},
+	{
+		ID: "2",
+		Metadata: []model.UserMetadata{
+			{
+				Name:        stringPtr("meta2"),
+				Address:     stringPtr("3"),
+				Description: stringPtr("4"),
+			},
+		},
+	},
+}
+
 var users = map[string]model.User{
 	"1": {
 		ID: "1",
