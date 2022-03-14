@@ -20,7 +20,7 @@ func (r *entityResolver) FindSMSAccountByNumber(ctx context.Context, number *str
 }
 
 func (r *entityResolver) FindUserByID(ctx context.Context, id string) (*model.User, error) {
-	return nil, nil
+	panic(fmt.Errorf("not implemented"))
 }
 
 // Entity returns generated.EntityResolver implementation.

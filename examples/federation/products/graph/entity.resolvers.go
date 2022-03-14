@@ -5,18 +5,26 @@ package graph
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jensneuse/graphql-go-tools/examples/federation/products/graph/generated"
 	"github.com/jensneuse/graphql-go-tools/examples/federation/products/graph/model"
 )
 
-func (r *entityResolver) FindProductByUpc(ctx context.Context, upc string) (*model.Product, error) {
-	for _, h := range hats {
-		if h.Upc == upc {
-			return h, nil
-		}
-	}
-	return nil, nil
+func (r *entityResolver) FindCarByID(ctx context.Context, id string) (*model.Car, error) {
+	panic(fmt.Errorf("not implemented"))
+}
+
+func (r *entityResolver) FindFurnitureByUpc(ctx context.Context, upc string) (*model.Furniture, error) {
+	panic(fmt.Errorf("not implemented"))
+}
+
+func (r *entityResolver) FindUserByID(ctx context.Context, id string) (*model.User, error) {
+	panic(fmt.Errorf("not implemented"))
+}
+
+func (r *entityResolver) FindVanByID(ctx context.Context, id string) (*model.Van, error) {
+	panic(fmt.Errorf("not implemented"))
 }
 
 // Entity returns generated.EntityResolver implementation.

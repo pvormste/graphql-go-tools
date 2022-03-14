@@ -7,18 +7,81 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"time"
 
 	"github.com/jensneuse/graphql-go-tools/examples/federation/products/graph/generated"
 	"github.com/jensneuse/graphql-go-tools/examples/federation/products/graph/model"
 )
 
-func (r *queryResolver) TopProducts(ctx context.Context, first *int) ([]*model.Product, error) {
-	return hats, nil
+func (r *queryResolver) Product(ctx context.Context, upc string) (model.Product, error) {
+	for i := 0; i < len(productsDB); i++ {
+		switch p := productsDB[i].(type) {
+		case *model.Furniture:
+			if p.Upc == upc {
+				return p, nil
+			}
+		}
+	}
+
+	return nil, nil
 }
 
-func (r *subscriptionResolver) UpdatedPrice(ctx context.Context) (<-chan *model.Product, error) {
-	updatedPrice := make(chan *model.Product)
+func (r *queryResolver) Vehicle(ctx context.Context, id string) (model.Vehicle, error) {
+	for i := 0; i < len(vehiclesDB); i++ {
+		switch v := vehiclesDB[i].(type) {
+		case model.Car:
+			if v.ID == id {
+				return v, nil
+			}
+		case model.Van:
+			if v.ID == id {
+				return v, nil
+			}
+		}
+	}
+
+	return nil, nil
+}
+
+func (r *queryResolver) TopProducts(ctx context.Context, first *int) ([]model.Product, error) {
+	const defaultTop = 5
+	productsCount := len(productsDB)
+	if first == nil && productsCount <= defaultTop {
+		return productsDB, nil
+	} else if first == nil && productsCount > defaultTop {
+		return productsDB[0:defaultTop], nil
+	} else if productsCount < *first {
+		return productsDB, nil
+	}
+
+	return productsDB[0:*first], nil
+}
+
+func (r *queryResolver) TopCars(ctx context.Context, first *int) ([]*model.Car, error) {
+	const defaultTop = 5
+	cars := make([]*model.Car, 0)
+	for _, vehicle := range vehiclesDB {
+		switch v := vehicle.(type) {
+		case *model.Car:
+			cars = append(cars, v)
+		}
+	}
+
+	carsCount := len(cars)
+	if first == nil && carsCount <= defaultTop {
+		return cars, nil
+	} else if first == nil && carsCount > defaultTop {
+		return cars[0:defaultTop], nil
+	} else if carsCount < *first {
+		return cars, nil
+	}
+
+	return cars[0:*first], nil
+}
+
+func (r *subscriptionResolver) UpdatedPrice(ctx context.Context) (<-chan model.Product, error) {
+	updatedPrice := make(chan model.Product)
 	go func() {
 		for {
 			select {
@@ -26,32 +89,37 @@ func (r *subscriptionResolver) UpdatedPrice(ctx context.Context) (<-chan *model.
 				return
 			case <-time.After(updateInterval):
 				rand.Seed(time.Now().UnixNano())
-				product := hats[0]
+				product := productsDB[0]
+				price := currentPrice
 
 				if randomnessEnabled {
-					product = hats[rand.Intn(len(hats)-1)]
-					product.Price = rand.Intn(maxPrice-minPrice+1) + minPrice
-					updatedPrice <- product
-					continue
+					product = productsDB[rand.Intn(len(productsDB)-1)]
+					price = rand.Intn(maxPrice-minPrice+1) + minPrice
+				} else {
+					currentPrice += 1
 				}
 
-				product.Price = currentPrice
-				currentPrice += 1
-				updatedPrice <- product
+				switch p := product.(type) {
+				case *model.Furniture:
+					p.Price = stringPtr(strconv.Itoa(price))
+					updatedPrice <- product
+				}
 			}
 		}
 	}()
 	return updatedPrice, nil
 }
 
-func (r *subscriptionResolver) UpdateProductPrice(ctx context.Context, upc string) (<-chan *model.Product, error) {
-	updatedPrice := make(chan *model.Product)
-	var product *model.Product
+func (r *subscriptionResolver) UpdateProductPrice(ctx context.Context, upc string) (<-chan model.Product, error) {
+	updatedPrice := make(chan model.Product)
+	var product model.Product
 
-	for _, hat := range hats {
-		if hat.Upc == upc {
-			product = hat
-			break
+	for _, productEntity := range productsDB {
+		switch p := productEntity.(type) {
+		case *model.Furniture:
+			if p.Upc == upc {
+				product = p
+			}
 		}
 	}
 
@@ -66,10 +134,16 @@ func (r *subscriptionResolver) UpdateProductPrice(ctx context.Context, upc strin
 				return
 			case <-time.After(time.Second):
 				rand.Seed(time.Now().UnixNano())
-				min := 10
-				max := 1499
-				product.Price = rand.Intn(max-min+1) + min
-				updatedPrice <- product
+				min := 50
+				max := 2000
+
+				switch p := product.(type) {
+				case *model.Furniture:
+					randPrice := rand.Intn(max-min+1) + min
+					p.Price = stringPtr(strconv.Itoa(randPrice))
+					updatedPrice <- p
+				}
+
 			}
 		}
 	}()
@@ -77,8 +151,8 @@ func (r *subscriptionResolver) UpdateProductPrice(ctx context.Context, upc strin
 	return updatedPrice, nil
 }
 
-func (r *subscriptionResolver) Stock(ctx context.Context) (<-chan []*model.Product, error) {
-	stock := make(chan []*model.Product)
+func (r *subscriptionResolver) Stock(ctx context.Context) (<-chan []model.Product, error) {
+	stock := make(chan []model.Product)
 
 	go func() {
 		for {
@@ -87,13 +161,16 @@ func (r *subscriptionResolver) Stock(ctx context.Context) (<-chan []*model.Produ
 				return
 			case <-time.After(2 * time.Second):
 				rand.Seed(time.Now().UnixNano())
-				randIndex := rand.Intn(len(hats))
+				randIndex := rand.Intn(len(productsDB))
 
-				if hats[randIndex].InStock > 0 {
-					hats[randIndex].InStock--
+				switch product := productsDB[randIndex].(type) {
+				case *model.Furniture:
+					if product.InStock > 0 {
+						product.InStock--
+					}
 				}
 
-				stock <- hats
+				stock <- productsDB
 			}
 		}
 	}()

@@ -6,8 +6,8 @@ import (
 
 var (
 	randomnessEnabled = true
-	minPrice          = 10
-	maxPrice          = 1499
-	currentPrice      = minPrice
+	minPrice          = 50
+	maxPrice          = 2000
+	currentPrice      = 1000
 	updateInterval    = time.Second
 )
