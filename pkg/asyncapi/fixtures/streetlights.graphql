@@ -1,0 +1,17 @@
+schema {
+  subscription: Subscription
+}
+
+type LightMeasured {
+  "Id of the streetlight."
+  id: Int
+  "Light intensity measured in lumens."
+  lumens: Int
+  "Date and time when the message was sent."
+  sentAt: String
+}
+
+type Subscription {
+  "Inform about environmental lighting conditions for a particular streetlight."
+  onLightMeasured: LightMeasured!
+}

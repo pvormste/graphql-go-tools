@@ -4,18 +4,34 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/jensneuse/graphql-go-tools/internal/pkg/unsafebytes"
-	"github.com/jensneuse/graphql-go-tools/pkg/lexer/literal"
+	"sort"
 	"unicode"
 
 	"github.com/asyncapi/parser-go/pkg/parser"
+	"github.com/jensneuse/graphql-go-tools/internal/pkg/unsafebytes"
 	"github.com/jensneuse/graphql-go-tools/pkg/ast"
+	"github.com/jensneuse/graphql-go-tools/pkg/lexer/literal"
 	"github.com/jensneuse/graphql-go-tools/pkg/operationreport"
 )
 
+type importer struct {
+	doc       *ast.Document
+	fieldRefs []int
+	schema    *Schema
+}
+
+type Property struct {
+	Type        string `json:"type"`
+	Format      string `json:"format"`
+	Minimum     string `json:"minimum"`
+	Maximum     string `json:"maximum"`
+	Description string `json:"description"`
+}
+
+// https://www.asyncapi.com/docs/specifications/v2.0.0#schemaObject
 type SchemaObject struct {
-	Type       string                            `json:"type"`
-	Properties map[string]map[string]interface{} `json:"properties"`
+	Type       string              `json:"type"`
+	Properties map[string]Property `json:"properties"`
 }
 
 // https://studio.asyncapi.com/#operation-publish-smartylighting.streetlights.1.0.event.{streetlightId}.lighting.measured
@@ -33,10 +49,15 @@ type MessageObject struct {
 	Payload     interface{} `json:"payload"`
 }
 
+type ParameterObject struct {
+	Description string       `json:"description"`
+	Schema      SchemaObject `json:"schema"`
+}
+
 type Channel struct {
-	Ref         string           `json:"$ref"`
-	Description string           `json:"description"`
-	Publish     *OperationObject `json:"publish"`
+	Description string                      `json:"description"`
+	Publish     *OperationObject            `json:"publish"`
+	Parameters  map[string]*ParameterObject `json:"parameters"`
 }
 
 type Schema struct {
@@ -95,19 +116,41 @@ func (i *importer) getOrCreateType(name string, kind ast.TypeKind) int {
 	}
 }
 
-func asyncApiTypesToGQLTypes(t string) ([]byte, error) {
-	switch t {
+func asyncApiTypeToGQLType(asyncApiType string) ([]byte, error) {
+	switch asyncApiType {
 	case "string":
 		return literal.STRING, nil
 	case "integer":
 		return literal.INT, nil
 	default:
-		return nil, fmt.Errorf("unknown type: %s", t)
+		return nil, fmt.Errorf("unknown type: %s", asyncApiType)
 	}
 }
 
-func (i *importer) processPayload(msg *MessageObject) error {
-	var inputValueDefinitionRefs []int
+func (i *importer) extractSchemaObject(payload map[string]interface{}) (*SchemaObject, error) {
+	schemaObject := &SchemaObject{
+		Type:       "object",
+		Properties: make(map[string]Property),
+	}
+
+	properties, ok := payload["properties"]
+	if !ok {
+		return nil, fmt.Errorf("missing keyword: properties")
+	}
+
+	for key := range properties.(map[string]interface{}) {
+		// TODO: Fix this
+		value := properties.(map[string]interface{})[key].(map[string]interface{})
+		schemaObject.Properties[key] = Property{
+			Type:        value["type"].(string),
+			Description: value["description"].(string),
+		}
+	}
+	return schemaObject, nil
+}
+
+func (i *importer) processMessage(msg *MessageObject) error {
+	var objectFieldRefs []int
 	switch payload := msg.Payload.(type) {
 	case map[string]interface{}:
 		// TODO: Check type
@@ -116,61 +159,85 @@ func (i *importer) processPayload(msg *MessageObject) error {
 			return fmt.Errorf("missing keyword: type")
 		}
 		if payloadType == "object" {
-			properties, ok := payload["properties"]
-			if !ok {
-				return fmt.Errorf("missing keyword: properties")
+			schemaObject, err := i.extractSchemaObject(payload)
+			if err != nil {
+				return err
 			}
-			for key, rawValue := range properties.(map[string]interface{}) {
-				value := rawValue.(map[string]interface{})
-				gtype, err := asyncApiTypesToGQLTypes(value["type"].(string))
+
+			// Sort the property names to produce a deterministic result. Good for tests.
+			var keys []string
+			for key := range schemaObject.Properties {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+
+			for _, key := range keys {
+				property := schemaObject.Properties[key]
+				gtype, err := asyncApiTypeToGQLType(property.Type)
 				if err != nil {
 					return err
 				}
 				// TODO: How do you determine type kind?
 				typeRef := i.getOrCreateType(string(gtype), ast.TypeKindNamed)
-				inputValueDefinitionRef := i.doc.ImportInputValueDefinition(key, value["description"].(string), typeRef, ast.DefaultValue{})
-				inputValueDefinitionRefs = append(inputValueDefinitionRefs, inputValueDefinitionRef)
+				objectFieldRefs = append(objectFieldRefs, i.doc.ImportFieldDefinition(key, property.Description, typeRef, nil, nil))
 			}
 		}
 	}
-	i.doc.ImportInputObjectTypeDefinition(msg.Name, msg.Description, inputValueDefinitionRefs)
-	return nil
-}
-
-func (i *importer) processPublishField(pb *OperationObject) error {
-	var inputValueRefs []int
-	if pb.Message != nil {
-		if pb.Message.Payload != nil {
-			err := i.processPayload(pb.Message)
-			if err != nil {
-				return err
-			}
-		}
-		typeRef := i.doc.AddNamedType([]byte(pb.Message.Name))
-		inputValueRef := i.doc.ImportInputValueDefinition(lowercaseFirstLetter(pb.Message.Name), "", typeRef, ast.DefaultValue{})
-		inputValueRefs = append(inputValueRefs, inputValueRef)
-		fieldRef := i.doc.ImportFieldDefinition(pb.OperationID, pb.Summary, typeRef, inputValueRefs, nil)
-		i.fieldRefs = append(i.fieldRefs, fieldRef)
+	if _, ok := i.doc.NodeByNameStr(msg.Name); !ok {
+		i.doc.ImportObjectTypeDefinition(msg.Name, msg.Description, objectFieldRefs, nil)
 	}
 	return nil
 }
 
-type importer struct {
-	doc       *ast.Document
-	fieldRefs []int
-	schema    *Schema
+func (i *importer) processParameters(params map[string]*ParameterObject) ([]int, error) {
+	var inputValueDefRefs []int
+	for param, properties := range params {
+		gtype, err := asyncApiTypeToGQLType(properties.Schema.Type)
+		if err != nil {
+			return nil, err
+		}
+		// TODO: How do you determine type kind?
+		argTypeRef := i.getOrCreateType(string(gtype), ast.TypeKindNamed)
+		inputValueDefRef := i.doc.ImportInputValueDefinition(lowercaseFirstLetter(param), "", argTypeRef, ast.DefaultValue{})
+		inputValueDefRefs = append(inputValueDefRefs, inputValueDefRef)
+	}
+	return inputValueDefRefs, nil
+}
+
+func (i *importer) processPublishField(channel Channel) error {
+	if channel.Publish.Message == nil {
+		return nil
+	}
+
+	pb := channel.Publish
+	if pb.Message.Payload != nil {
+		err := i.processMessage(pb.Message)
+		if err != nil {
+			return err
+		}
+	}
+
+	typeRef := i.doc.AddNonNullNamedType([]byte(pb.Message.Name))
+	inputValueDefRefs, err := i.processParameters(channel.Parameters)
+	if err != nil {
+		return err
+	}
+
+	fieldRef := i.doc.ImportFieldDefinition(pb.OperationID, pb.Summary, typeRef, inputValueDefRefs, nil)
+	i.fieldRefs = append(i.fieldRefs, fieldRef)
+	return nil
 }
 
 func (i *importer) importAsyncAPIDocument() error {
-	for _, obj := range i.schema.Channels {
-		if obj.Publish != nil {
-			err := i.processPublishField(obj.Publish)
+	// TODO: Extract server configuration from the AsyncAPI document
+	for _, channel := range i.schema.Channels {
+		if channel.Publish != nil {
+			err := i.processPublishField(channel)
 			if err != nil {
 				return err
 			}
 		}
 	}
-
 	return nil
 }
 

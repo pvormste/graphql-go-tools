@@ -1,0 +1,17 @@
+schema {
+    subscription: Subscription
+}
+
+type lightMeasured {
+    "Light intensity measured in lumens."
+    lumens: Int
+    "Date and time when the message was sent."
+    sentAt: String
+}
+
+type Subscription {
+    "Inform about environmental lighting conditions of a particular streetlight."
+    receiveLightMeasurement(streetlightId: String): lightMeasured!
+    "Replica - Inform about environmental lighting conditions of a particular streetlight."
+    receiveLightMeasurementReplica(streetlightId: String): lightMeasured!
+}
