@@ -20,7 +20,10 @@ func (r *entityResolver) FindFurnitureByUpc(ctx context.Context, upc string) (*m
 }
 
 func (r *entityResolver) FindUserByID(ctx context.Context, id string) (*model.User, error) {
-	panic(fmt.Errorf("not implemented"))
+	fmt.Println(id)
+	return &model.User{
+		ID: id,
+	}, nil
 }
 
 func (r *entityResolver) FindVanByID(ctx context.Context, id string) (*model.Van, error) {

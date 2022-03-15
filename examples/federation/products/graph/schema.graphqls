@@ -77,7 +77,7 @@ type Van implements Vehicle @key(fields: "id") {
 union Thing = Car | Ikea
 
 extend type User @key(fields: "id") {
-    id: ID!
+    id: ID! @external
     vehicle: Vehicle
     thing: Thing
 }

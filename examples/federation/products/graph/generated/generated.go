@@ -41,6 +41,7 @@ type ResolverRoot interface {
 	Entity() EntityResolver
 	Query() QueryResolver
 	Subscription() SubscriptionResolver
+	User() UserResolver
 }
 
 type DirectiveRoot struct {
@@ -147,6 +148,10 @@ type SubscriptionResolver interface {
 	UpdatedPrice(ctx context.Context) (<-chan model.Product, error)
 	UpdateProductPrice(ctx context.Context, upc string) (<-chan model.Product, error)
 	Stock(ctx context.Context) (<-chan []model.Product, error)
+}
+type UserResolver interface {
+	Vehicle(ctx context.Context, obj *model.User) (model.Vehicle, error)
+	Thing(ctx context.Context, obj *model.User) (model.Thing, error)
 }
 
 type executableSchema struct {
@@ -647,7 +652,7 @@ type Van implements Vehicle @key(fields: "id") {
 union Thing = Car | Ikea
 
 extend type User @key(fields: "id") {
-    id: ID!
+    id: ID! @external
     vehicle: Vehicle
     thing: Thing
 }
@@ -2252,14 +2257,14 @@ func (ec *executionContext) _User_vehicle(ctx context.Context, field graphql.Col
 		Object:     "User",
 		Field:      field,
 		Args:       nil,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 	}
 
 	ctx = graphql.WithFieldContext(ctx, fc)
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.Vehicle, nil
+		return ec.resolvers.User().Vehicle(rctx, obj)
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -2284,14 +2289,14 @@ func (ec *executionContext) _User_thing(ctx context.Context, field graphql.Colle
 		Object:     "User",
 		Field:      field,
 		Args:       nil,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 	}
 
 	ctx = graphql.WithFieldContext(ctx, fc)
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.Thing, nil
+		return ec.resolvers.User().Thing(rctx, obj)
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -4192,12 +4197,30 @@ func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj
 		case "id":
 			out.Values[i] = ec._User_id(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				invalids++
+				atomic.AddUint32(&invalids, 1)
 			}
 		case "vehicle":
-			out.Values[i] = ec._User_vehicle(ctx, field, obj)
+			field := field
+			out.Concurrently(i, func() (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._User_vehicle(ctx, field, obj)
+				return res
+			})
 		case "thing":
-			out.Values[i] = ec._User_thing(ctx, field, obj)
+			field := field
+			out.Concurrently(i, func() (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._User_thing(ctx, field, obj)
+				return res
+			})
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

@@ -91,14 +91,6 @@ type ProductDetailsFurniture struct {
 
 func (ProductDetailsFurniture) IsProductDetails() {}
 
-type User struct {
-	ID      string  `json:"id"`
-	Vehicle Vehicle `json:"vehicle"`
-	Thing   Thing   `json:"thing"`
-}
-
-func (User) IsEntity() {}
-
 type Van struct {
 	ID          string  `json:"id"`
 	Description *string `json:"description"`

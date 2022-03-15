@@ -178,11 +178,53 @@ func (r *subscriptionResolver) Stock(ctx context.Context) (<-chan []model.Produc
 	return stock, nil
 }
 
+func (r *userResolver) Vehicle(ctx context.Context, obj *model.User) (model.Vehicle, error) {
+	if obj == nil {
+		return nil, nil
+	}
+
+	for _, vehicle := range vehiclesDB {
+		switch v := vehicle.(type) {
+		case *model.Car:
+			if v.ID == obj.ID {
+				return v, nil
+			}
+		case *model.Van:
+			if v.ID == obj.ID {
+				return v, nil
+			}
+		}
+	}
+
+	return nil, nil
+}
+
+func (r *userResolver) Thing(ctx context.Context, obj *model.User) (model.Thing, error) {
+	if obj == nil {
+		return nil, nil
+	}
+
+	for _, vehicle := range vehiclesDB {
+		switch v := vehicle.(type) {
+		case *model.Car:
+			if v.ID == obj.ID {
+				return v, nil
+			}
+		}
+	}
+
+	return nil, nil
+}
+
 // Query returns generated.QueryResolver implementation.
 func (r *Resolver) Query() generated.QueryResolver { return &queryResolver{r} }
 
 // Subscription returns generated.SubscriptionResolver implementation.
 func (r *Resolver) Subscription() generated.SubscriptionResolver { return &subscriptionResolver{r} }
 
+// User returns generated.UserResolver implementation.
+func (r *Resolver) User() generated.UserResolver { return &userResolver{r} }
+
 type queryResolver struct{ *Resolver }
 type subscriptionResolver struct{ *Resolver }
+type userResolver struct{ *Resolver }
