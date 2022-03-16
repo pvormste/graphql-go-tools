@@ -28,13 +28,11 @@ type Property struct {
 	Description string `json:"description"`
 }
 
-// https://www.asyncapi.com/docs/specifications/v2.0.0#schemaObject
 type SchemaObject struct {
 	Type       string              `json:"type"`
 	Properties map[string]Property `json:"properties"`
 }
 
-// https://studio.asyncapi.com/#operation-publish-smartylighting.streetlights.1.0.event.{streetlightId}.lighting.measured
 type OperationObject struct {
 	OperationID string         `json:"operationId"`
 	Summary     string         `json:"summary"`
@@ -122,6 +120,10 @@ func asyncApiTypeToGQLType(asyncApiType string) ([]byte, error) {
 		return literal.STRING, nil
 	case "integer":
 		return literal.INT, nil
+	case "number":
+		return literal.FLOAT, nil
+	case "boolean":
+		return literal.BOOLEAN, nil
 	default:
 		return nil, fmt.Errorf("unknown type: %s", asyncApiType)
 	}
@@ -158,6 +160,7 @@ func (i *importer) processMessage(msg *MessageObject) error {
 		if !ok {
 			return fmt.Errorf("missing keyword: type")
 		}
+		// TODO: Payload type can be any type. Currently, we only handle schema objects.
 		if payloadType == "object" {
 			schemaObject, err := i.extractSchemaObject(payload)
 			if err != nil {

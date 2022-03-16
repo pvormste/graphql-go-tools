@@ -148,11 +148,6 @@ components:
       format: date-time
       description: Date and time when the message was sent.
 
-  #securitySchemes:
-  #  saslScram:
-  #    type: scramSha256
-  #    description: Provide your username and password for SASL/SCRAM authentication
-
   parameters:
     streetlightId:
       description: The ID of the streetlight.
