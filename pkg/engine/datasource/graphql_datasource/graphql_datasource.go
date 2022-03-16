@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/buger/jsonparser"
 	"github.com/jensneuse/graphql-go-tools/pkg/asttransform"
 	"github.com/tidwall/sjson"
 
@@ -1154,7 +1155,65 @@ type Source struct {
 	httpClient *http.Client
 }
 
+func (s *Source) compactAndUnNullVariables(input []byte) []byte {
+	variables, _, _, err := jsonparser.Get(input, "body","variables")
+	if err != nil {
+		return input
+	}
+	if bytes.Equal(variables, []byte("null")) || bytes.Equal(variables, []byte("{}")) {
+		return input
+	}
+	if bytes.ContainsAny(variables, " \t\n\r") {
+		buf := bytes.NewBuffer(make([]byte, 0, len(variables)))
+		_ = json.Compact(buf, variables)
+		variables = buf.Bytes()
+	}
+	cp := make([]byte, len(variables))
+	copy(cp, variables)
+	variables = cp
+	var changed bool
+	for {
+		variables, changed = s.unNullVariables(variables)
+		if !changed {
+			break
+		}
+	}
+	input, _ = jsonparser.Set(input, variables, "body","variables")
+	return input
+}
+
+func (s *Source) unNullVariables(input []byte) ([]byte, bool) {
+	if i := bytes.Index(input, []byte(":{}")); i != -1 {
+		end := i + 3
+		hasTrainlingComma := false
+		if input[end] == ',' {
+			end++
+			hasTrainlingComma = true
+		}
+		startQuote := bytes.LastIndex(input[:i-2], []byte("\""))
+		if !hasTrainlingComma && input[startQuote-1] == ',' {
+			startQuote--
+		}
+		return append(input[:startQuote], input[end:]...), true
+	}
+	if i := bytes.Index(input, []byte("null")); i != -1 {
+		end := i + 4
+		hasTrailingComma := false
+		if input[end] == ',' {
+			end++
+			hasTrailingComma = true
+		}
+		startQuote := bytes.LastIndex(input[:i-2], []byte("\""))
+		if !hasTrailingComma && input[startQuote-1] == ',' {
+			startQuote--
+		}
+		return append(input[:startQuote], input[end:]...), true
+	}
+	return input, false
+}
+
 func (s *Source) Load(ctx context.Context, input []byte, writer io.Writer) (err error) {
+	input = s.compactAndUnNullVariables(input)
 	return httpclient.Do(s.httpClient, ctx, input, writer)
 }
 

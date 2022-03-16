@@ -5645,6 +5645,65 @@ func runTestOnTestDefinition(operation, operationName string, expectedPlan plan.
 	return RunTest(testDefinition, operation, operationName, expectedPlan, config, extraChecks...)
 }
 
+func TestUnNullVariables(t *testing.T){
+
+	t.Run("variables with whitespace", func(t *testing.T) {
+		s := &Source{}
+		out := s.compactAndUnNullVariables([]byte(`{"body":{"variables":{"email":null,"firstName": "FirstTest",		"lastName":"LastTest","phone":123456,"preferences":{ "notifications":{}},"password":"password"}}}`))
+		expected := `{"body":{"variables":{"firstName":"FirstTest","lastName":"LastTest","phone":123456,"password":"password"}}}`
+		assert.Equal(t, expected,string(out))
+	})
+
+	t.Run("empty variables", func(t *testing.T) {
+		s := &Source{}
+		out := s.compactAndUnNullVariables([]byte(`{"body":{"variables":{}}}`))
+		expected := `{"body":{"variables":{}}}`
+		assert.Equal(t, expected,string(out))
+	})
+
+	t.Run("two variables, one null", func(t *testing.T) {
+		s := &Source{}
+		out := s.compactAndUnNullVariables([]byte(`{"body":{"variables":{"a":null,"b":true}}}`))
+		expected := `{"body":{"variables":{"b":true}}}`
+		assert.Equal(t, expected,string(out))
+	})
+
+	t.Run("two variables, one null reverse", func(t *testing.T) {
+		s := &Source{}
+		out := s.compactAndUnNullVariables([]byte(`{"body":{"variables":{"a":true,"b":null}}}`))
+		expected := `{"body":{"variables":{"a":true}}}`
+		assert.Equal(t, expected,string(out))
+	})
+
+	t.Run("null variables", func(t *testing.T) {
+		s := &Source{}
+		out := s.compactAndUnNullVariables([]byte(`{"body":{"variables":null}}`))
+		expected := `{"body":{"variables":null}}`
+		assert.Equal(t, expected,string(out))
+	})
+
+	t.Run("ignore null inside non variables", func(t *testing.T) {
+		s := &Source{}
+		out := s.compactAndUnNullVariables([]byte(`{"body":{"variables":{"foo":null},"body":"query {foo(bar: null){baz}}"}}`))
+		expected := `{"body":{"variables":{},"body":"query {foo(bar: null){baz}}"}}`
+		assert.Equal(t, expected,string(out))
+	})
+
+	t.Run("variables missing", func(t *testing.T) {
+		s := &Source{}
+		out := s.compactAndUnNullVariables([]byte(`{"body":{"query":"{foo}"}}`))
+		expected := `{"body":{"query":"{foo}"}}`
+		assert.Equal(t, expected,string(out))
+	})
+
+	t.Run("variables null", func(t *testing.T) {
+		s := &Source{}
+		out := s.compactAndUnNullVariables([]byte(`{"body":{"query":"{foo}","variables":null}}`))
+		expected := `{"body":{"query":"{foo}","variables":null}}`
+		assert.Equal(t, expected,string(out))
+	})
+}
+
 func BenchmarkFederationBatching(b *testing.B) {
 	userService := FakeDataSource(`{"data":{"me": {"id": "1234","username": "Me","__typename": "User"}}}`)
 	reviewsService := FakeDataSource(`{"data":{"_entities":[{"reviews": [{"body": "A highly effective form of birth control.","product": {"upc": "top-1","__typename": "Product"}},{"body": "Fedoras are one of the most fashionable hats around and can look great with a variety of outfits.","product": {"upc": "top-2","__typename": "Product"}}]}]}}`)
