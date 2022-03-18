@@ -62,6 +62,5 @@ func TestAsyncAPI_EmailService(t *testing.T) {
 
 	fixture, err := ioutil.ReadFile("./fixtures/email-service.graphql")
 	require.NoError(t, err)
-
 	require.Equal(t, string(fixture), string(result))
 }

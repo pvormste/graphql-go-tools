@@ -244,8 +244,14 @@ func (i *importer) importAsyncAPIDocument() error {
 	return nil
 }
 
+// ImportAsyncAPIDocumentByte transforms an AsyncAPI document into a GraphQL schema.
 func ImportAsyncAPIDocumentByte(input []byte) (ast.Document, operationreport.Report) {
+	// NewDocument creates a new GraphQL schema ==> schema {}
 	doc := ast.NewDocument()
+
+	// Parse and validate the AsyncAPI document here.
+	// parser-go returns a complex map[string]interface, then we traverse
+	// over that data structure to build a GrahpQL schema.
 	report := operationreport.Report{}
 	schema, err := validateAndParseAsyncAPIDocument(input)
 	if err != nil {
@@ -258,6 +264,7 @@ func ImportAsyncAPIDocumentByte(input []byte) (ast.Document, operationreport.Rep
 		schema: schema,
 	}
 
+	// Create a Subscription type here
 	doc.ImportSchemaDefinition("", "", "Subscription")
 
 	err = i.importAsyncAPIDocument()
@@ -266,6 +273,7 @@ func ImportAsyncAPIDocumentByte(input []byte) (ast.Document, operationreport.Rep
 		return *doc, report
 	}
 
+	// Add fields to the newly created Subscription.
 	doc.ImportObjectTypeDefinition("Subscription", "", i.fieldRefs, []int{})
 	return *doc, report
 }
