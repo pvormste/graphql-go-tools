@@ -48,8 +48,6 @@ func newMockKafkaBroker(t *testing.T, topic, group string, fr *sarama.FetchRespo
 	mockOffsetFetchResponse := sarama.NewMockOffsetFetchResponse(t).
 		SetOffset(group, topic, defaultPartition, 0, "", sarama.KError(0))
 
-	mockApiVersionsResponse := sarama.NewMockApiVersionsResponse(t)
-
 	mockOffsetCommitResponse := sarama.NewMockOffsetCommitResponse(t)
 	mockBroker.SetHandlerByMap(map[string]sarama.MockResponse{
 		"MetadataRequest":        mockMetadataResponse,
@@ -61,7 +59,6 @@ func newMockKafkaBroker(t *testing.T, topic, group string, fr *sarama.FetchRespo
 		"JoinGroupRequest":       mockJoinGroupResponse,
 		"SyncGroupRequest":       mockSyncGroupResponse,
 		"HeartbeatRequest":       mockHeartbeatResponse,
-		"ApiVersionsRequest":     mockApiVersionsResponse,
 		"OffsetCommitRequest":    mockOffsetCommitResponse,
 	})
 
