@@ -5,8 +5,8 @@ import (
 	"github.com/jensneuse/graphql-go-tools/pkg/astvisitor"
 )
 
-func dataTypeDeduplication(walker *astvisitor.Walker) {
-	visitor := dataTypeDeduplicationVisitor{
+func removeScalarDuplicates(walker *astvisitor.Walker) {
+	visitor := removeScalarDuplicatesVisitor{
 		Walker: walker,
 	}
 	walker.RegisterScalarTypeDefinitionVisitor(&visitor)
@@ -15,7 +15,7 @@ func dataTypeDeduplication(walker *astvisitor.Walker) {
 	walker.RegisterEnterScalarTypeDefinitionVisitor(&visitor)
 }
 
-type dataTypeDeduplicationVisitor struct {
+type removeScalarDuplicatesVisitor struct {
 	*astvisitor.Walker
 	operation    *ast.Document
 	definition   *ast.Document
@@ -24,14 +24,14 @@ type dataTypeDeduplicationVisitor struct {
 	lastRef      int
 }
 
-func (d *dataTypeDeduplicationVisitor) EnterDocument(operation, definition *ast.Document) {
+func (d *removeScalarDuplicatesVisitor) EnterDocument(operation, definition *ast.Document) {
 	d.operation, d.definition = operation, definition
 	d.typesSeen = make(map[string]bool)
 	d.refsToRemove = make([]int, 0)
 	d.lastRef = -1
 }
 
-func (d *dataTypeDeduplicationVisitor) LeaveDocument(operation, definition *ast.Document) {
+func (d *removeScalarDuplicatesVisitor) LeaveDocument(operation, definition *ast.Document) {
 	if len(d.refsToRemove) < 1 {
 		return
 	}
@@ -54,7 +54,7 @@ MainLoop:
 	d.operation.RootNodes = newRootNodes
 }
 
-func (d *dataTypeDeduplicationVisitor) EnterScalarTypeDefinition(ref int) {
+func (d *removeScalarDuplicatesVisitor) EnterScalarTypeDefinition(ref int) {
 	if ref <= d.lastRef {
 		return
 	}
@@ -67,6 +67,5 @@ func (d *dataTypeDeduplicationVisitor) EnterScalarTypeDefinition(ref int) {
 	d.lastRef = ref
 }
 
-func (d dataTypeDeduplicationVisitor) LeaveScalarTypeDefinition(ref int) {
-	return
+func (d removeScalarDuplicatesVisitor) LeaveScalarTypeDefinition(ref int) {
 }

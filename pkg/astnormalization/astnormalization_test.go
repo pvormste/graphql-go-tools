@@ -511,6 +511,10 @@ schema {
 	subscription: Subscription
 }
 
+scalar Test
+
+scalar Test
+
 interface Body {
 	body: String
 }

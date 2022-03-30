@@ -174,6 +174,7 @@ func (o *OperationNormalizer) setupOperationWalkers() {
 	mergeFieldSelections(&other)
 	deduplicateFields(&other)
 	extractVariablesDefaultValue(&other)
+	removeScalarDuplicates(&other)
 	if o.options.removeFragmentDefinitions {
 		removeFragmentDefinitions(&other)
 	}
