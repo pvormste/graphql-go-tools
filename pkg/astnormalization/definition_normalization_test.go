@@ -136,4 +136,32 @@ func TestNormalizeDefinition(t *testing.T) {
 			}`,
 		)
 	})
+
+	t.Run("Duplicate scalars are removed", func(t *testing.T) {
+		run(t, `
+			schema {
+				query: Query
+			}
+			scalar DateTime
+			scalar DateTime
+			scalar Foo
+			scalar Bar
+			type Query {
+				me: String
+				created: DateTime
+			}
+			scalar DateTime
+			scalar Bar`, `
+			schema {
+				query: Query
+			}
+			scalar DateTime
+			scalar Foo
+			scalar Bar
+			type Query {
+				me: String
+				created: DateTime
+			}`,
+		)
+	})
 }

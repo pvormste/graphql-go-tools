@@ -37,6 +37,7 @@ func (o *DefinitionNormalizer) setupWalkers() {
 	extendUnionTypeDefinition(&walker)
 	removeMergedTypeExtensions(&walker)
 	implicitSchemaDefinition(&walker)
+	removeScalarDuplicates(&walker)
 
 	o.walker = &walker
 }
