@@ -88,6 +88,7 @@ var (
 	BROKERADDR                    = []byte("brokerAddr")
 	CLIENTID                      = []byte("clientID")
 	TOPIC                         = []byte("topic")
+	GROUPID                       = []byte("groupID")
 	HOST                          = []byte("host")
 	PARAMS                        = []byte("params")
 	FIELD                         = []byte("field")

@@ -1,10 +1,8 @@
-package datasource
+package kafka_datasource
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"github.com/jensneuse/abstractlogger"
 	"sync"
 	"testing"
 	"time"
@@ -168,12 +166,7 @@ func TestKafkaMockBroker(t *testing.T) {
 	// Ready for consuming
 	<-handler.ctx.Done()
 
-	//c := sarama.NewConfig()
-	//c.Producer.Flush.Messages = 1
-	//c.Producer.Flush.Frequency = time.Millisecond
-	//c.Producer.Return.Successes = true
-
-	// Add a message to the topic. Consumer group will fetch that message and trigger ConsumeClaim method.
+	// Add a message to the topic. KafkaConsumerGroup group will fetch that message and trigger ConsumeClaim method.
 	fr.AddMessage(topic, defaultPartition, testMessageKey, testMessageValue, 0)
 
 	// When this context is canceled, the processMessage function has been called and run without any problem.
@@ -181,56 +174,14 @@ func TestKafkaMockBroker(t *testing.T) {
 
 	wg.Wait()
 
-	// Consumer is stopped here.
+	// KafkaConsumerGroup is stopped here.
 	require.NoError(t, <-errCh)
 	require.Equal(t, 1, called)
 	require.ErrorIs(t, ctx.Err(), context.Canceled)
 
 }
 
-type ResolvedArgument struct {
-	Key   []byte
-	Value []byte
-}
-type ResolvedArgs []ResolvedArgument
-
-func (r ResolvedArgs) Keys() [][]byte {
-	keys := make([][]byte, len(r))
-	for i := range r {
-		keys[i] = (r)[i].Key
-	}
-	return keys
-}
-
-func (r *ResolvedArgs) Filter(condition func(i int) (keep bool)) {
-	n := 0
-	for i := range *r {
-		if condition(i) {
-			(*r)[n] = (*r)[i]
-			n++
-		}
-	}
-	*r = (*r)[:n]
-}
-
-func (r ResolvedArgs) ByKey(key []byte) []byte {
-	for i := 0; i < len(r); i++ {
-		if bytes.Equal(r[i].Key, key) {
-			return r[i].Value
-		}
-	}
-	return nil
-}
-
-func (r ResolvedArgs) Dump() []string {
-	out := make([]string, len(r))
-	for i := range r {
-		out[i] = string(r[i].Key) + "=" + string(r[i].Value)
-	}
-	return out
-}
-
-func TestKafkaDataSource_Resolve(t *testing.T) {
+func TestKafkaConsumerGroup(t *testing.T) {
 	var (
 		testMessageKey   = sarama.StringEncoder("test.message.key")
 		testMessageValue = sarama.StringEncoder("test.message.value")
@@ -239,43 +190,26 @@ func TestKafkaDataSource_Resolve(t *testing.T) {
 	)
 
 	fr := &sarama.FetchResponse{Version: 11}
-
 	mockBroker := newMockKafkaBroker(t, topic, consumerGroup, fr)
 	defer mockBroker.Close()
 
-	args := ResolvedArgs{
-		{
-			Key:   []byte("brokerAddr"),
-			Value: []byte(mockBroker.Addr()),
-		},
-		{
-			Key:   []byte("clientID"),
-			Value: []byte("graphql-go-tools-test"),
-		},
-		{
-			Key:   []byte("groupID"),
-			Value: []byte(consumerGroup),
-		},
-		{
-			Key:   []byte("topic"),
-			Value: []byte(topic),
-		},
-	}
-
-	k := &KafkaDataSource{Log: abstractlogger.Noop{}}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Add a message to the topic. Consumer group will fetch that message and trigger ConsumeClaim method.
+	// Add a message to the topic. KafkaConsumerGroup group will fetch that message and trigger ConsumeClaim method.
 	fr.AddMessage(topic, defaultPartition, testMessageKey, testMessageValue, 0)
 
-	buf := bytes.NewBuffer(nil)
-	nr, err := k.Resolve(ctx, args, buf)
-	fmt.Println(nr)
-	fmt.Println(err)
-	require.NoError(t, err)
-	fmt.Println(buf.String())
-	//cancel()
-	<-time.After(time.Second)
+	cg := &KafkaConsumerGroup{}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	options := GraphQLSubscriptionOptions{
+		BrokerAddr: mockBroker.Addr(),
+		Topic:      topic,
+		GroupID:    consumerGroup,
+		ClientID:   "graphql-go-tools-test",
+	}
+	next := make(chan []byte)
+	err := cg.Subscribe(ctx, options, next)
+	require.NoError(t, err)
+
+	msg := <-next
+	fmt.Println(string(msg))
 }
