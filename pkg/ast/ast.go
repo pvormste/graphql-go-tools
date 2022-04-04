@@ -187,6 +187,17 @@ func (d *Document) ImportRootNode(ref int, kind NodeKind) {
 	})
 }
 
+func (d *Document) DeleteRootNodesByPointer(nodes []*Node) {
+	for i := len(nodes) - 1; i > -1; i-- {
+		for j := len(d.RootNodes) - 1; j > -1; j-- {
+			if d.RootNodes[j] == *nodes[i] {
+				d.RootNodes = append(d.RootNodes[:j], d.RootNodes[j+1:]...)
+				break
+			}
+		}
+	}
+}
+
 func (d *Document) DeleteRootNodes(nodes []Node) {
 	for i := range nodes {
 		d.DeleteRootNode(nodes[i])
