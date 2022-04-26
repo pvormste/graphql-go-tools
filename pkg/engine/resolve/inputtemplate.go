@@ -6,6 +6,7 @@ import (
 	"net/textproto"
 
 	"github.com/buger/jsonparser"
+
 	"github.com/jensneuse/graphql-go-tools/pkg/fastbuffer"
 	"github.com/jensneuse/graphql-go-tools/pkg/lexer/literal"
 )
@@ -60,7 +61,11 @@ func (i *InputTemplate) renderObjectVariable(ctx context.Context, variables []by
 		return nil
 	}
 	if valueType == jsonparser.String {
-		value = variables[offset-len(value)-2:offset]
+		value = variables[offset-len(value)-2 : offset]
+		switch segment.Renderer.GetKind() {
+		case VariableRendererKindPlain:
+			segment.Renderer.(*PlainVariableRenderer).rootValueType.Value = valueType
+		}
 	}
 	return segment.Renderer.RenderVariable(ctx, value, preparedInput)
 }
@@ -72,7 +77,7 @@ func (i *InputTemplate) renderContextVariable(ctx *Context, segment TemplateSegm
 		return nil
 	}
 	if valueType == jsonparser.String {
-		value = ctx.Variables[offset-len(value)-2:offset]
+		value = ctx.Variables[offset-len(value)-2 : offset]
 	}
 	return segment.Renderer.RenderVariable(ctx, value, preparedInput)
 }

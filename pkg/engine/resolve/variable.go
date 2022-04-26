@@ -26,11 +26,21 @@ const (
 	HeaderVariableKind
 )
 
+const (
+	VariableRendererKindPlain                 = "plain"
+	VariableRendererKindPlanWithValidation    = "plainWithValidation"
+	VariableRendererKindJson                  = "json"
+	VariableRendererKindJsonWithValidation    = "jsonWithValidation"
+	VariableRendererKindGraphqlWithValidation = "graphqlWithValidation"
+	VariableRendererKindCsv                   = "csv"
+)
+
 // VariableRenderer is the interface to allow custom implementations of rendering Variables
 // Depending on where a Variable is being used, a different method for rendering is required
 // E.g. a Variable needs to be rendered conforming to the GraphQL specification, when used within a GraphQL Query
 // If a Variable is used within a JSON Object, the contents need to be rendered as a JSON Object
 type VariableRenderer interface {
+	GetKind() string
 	RenderVariable(ctx context.Context, data []byte, out io.Writer) error
 }
 
@@ -42,6 +52,10 @@ type JSONVariableRenderer struct {
 	Kind          string
 	validator     *graphqljsonschema.Validator
 	rootValueType JsonRootType
+}
+
+func (r *JSONVariableRenderer) GetKind() string {
+	return r.Kind
 }
 
 func (r *JSONVariableRenderer) RenderVariable(ctx context.Context, data []byte, out io.Writer) error {
@@ -57,14 +71,14 @@ func (r *JSONVariableRenderer) RenderVariable(ctx context.Context, data []byte, 
 
 func NewJSONVariableRenderer() *JSONVariableRenderer {
 	return &JSONVariableRenderer{
-		Kind: "json",
+		Kind: VariableRendererKindJson,
 	}
 }
 
 func NewJSONVariableRendererWithValidation(jsonSchema string) *JSONVariableRenderer {
 	validator := graphqljsonschema.MustNewValidatorFromString(jsonSchema)
 	return &JSONVariableRenderer{
-		Kind:       "jsonWithValidation",
+		Kind:       VariableRendererKindJsonWithValidation,
 		JSONSchema: jsonSchema,
 		validator:  validator,
 	}
@@ -83,7 +97,7 @@ func NewJSONVariableRendererWithValidationFromTypeRef(operation, definition *ast
 		return nil, err
 	}
 	return &JSONVariableRenderer{
-		Kind:          "jsonWithValidation",
+		Kind:          VariableRendererKindJsonWithValidation,
 		JSONSchema:    string(schemaBytes),
 		validator:     validator,
 		rootValueType: getJSONRootType(operation, definition, variableTypeRef),
@@ -92,14 +106,14 @@ func NewJSONVariableRendererWithValidationFromTypeRef(operation, definition *ast
 
 func NewPlainVariableRenderer() *PlainVariableRenderer {
 	return &PlainVariableRenderer{
-		Kind: "plain",
+		Kind: VariableRendererKindPlain,
 	}
 }
 
 func NewPlainVariableRendererWithValidation(jsonSchema string) *PlainVariableRenderer {
 	validator := graphqljsonschema.MustNewValidatorFromString(jsonSchema)
 	return &PlainVariableRenderer{
-		Kind:       "plainWithValidation",
+		Kind:       VariableRendererKindPlanWithValidation,
 		JSONSchema: jsonSchema,
 		validator:  validator,
 	}
@@ -119,7 +133,7 @@ func NewPlainVariableRendererWithValidationFromTypeRef(operation, definition *as
 	}
 	rootValueType := getJSONRootType(operation, definition, variableTypeRef)
 	return &PlainVariableRenderer{
-		Kind:          "plainWithValidation",
+		Kind:          VariableRendererKindPlanWithValidation,
 		JSONSchema:    string(schemaBytes),
 		validator:     validator,
 		rootValueType: rootValueType,
@@ -136,6 +150,10 @@ type PlainVariableRenderer struct {
 	Kind          string
 	validator     *graphqljsonschema.Validator
 	rootValueType JsonRootType
+}
+
+func (p *PlainVariableRenderer) GetKind() string {
+	return p.Kind
 }
 
 func (p *PlainVariableRenderer) RenderVariable(ctx context.Context, data []byte, out io.Writer) error {
@@ -165,7 +183,7 @@ func NewGraphQLVariableRendererFromTypeRef(operation, definition *ast.Document, 
 		return nil, err
 	}
 	return &GraphQLVariableRenderer{
-		Kind:          "graphqlWithValidation",
+		Kind:          VariableRendererKindGraphqlWithValidation,
 		JSONSchema:    string(schemaBytes),
 		validator:     validator,
 		rootValueType: getJSONRootType(operation, definition, variableTypeRef),
@@ -180,7 +198,7 @@ func NewGraphQLVariableRenderer(jsonSchema string) *GraphQLVariableRenderer {
 		panic(err)
 	}
 	return &GraphQLVariableRenderer{
-		Kind:       "graphqlWithValidation",
+		Kind:       VariableRendererKindGraphqlWithValidation,
 		JSONSchema: jsonSchema,
 		validator:  validator,
 		rootValueType: JsonRootType{
@@ -295,6 +313,15 @@ type GraphQLVariableRenderer struct {
 	rootValueType JsonRootType
 }
 
+func (g *GraphQLVariableRenderer) GetKind() string {
+	return g.Kind
+}
+
+// add renderer that renders both variable name and variable value
+// before rendering, evaluate if the value contains null values
+// if an object contains only null values, set the object to null
+// do this recursively until reaching the root of the object
+
 func (g *GraphQLVariableRenderer) RenderVariable(ctx context.Context, data []byte, out io.Writer) error {
 	valid := g.validator.Validate(ctx, data)
 	if !valid {
@@ -363,14 +390,14 @@ func (g *GraphQLVariableRenderer) renderGraphQLValue(data []byte, valueType json
 
 func NewCSVVariableRenderer(arrayValueType JsonRootType) *CSVVariableRenderer {
 	return &CSVVariableRenderer{
-		Kind:           "csv",
+		Kind:           VariableRendererKindCsv,
 		arrayValueType: arrayValueType,
 	}
 }
 
 func NewCSVVariableRendererFromTypeRef(operation, definition *ast.Document, variableTypeRef int) *CSVVariableRenderer {
 	return &CSVVariableRenderer{
-		Kind:           "csv",
+		Kind:           VariableRendererKindCsv,
 		arrayValueType: getJSONRootType(operation, definition, variableTypeRef),
 	}
 }
@@ -380,6 +407,10 @@ func NewCSVVariableRendererFromTypeRef(operation, definition *ast.Document, vari
 type CSVVariableRenderer struct {
 	Kind           string
 	arrayValueType JsonRootType
+}
+
+func (c *CSVVariableRenderer) GetKind() string {
+	return c.Kind
 }
 
 func (c *CSVVariableRenderer) RenderVariable(_ context.Context, data []byte, out io.Writer) error {
