@@ -9,19 +9,19 @@ import (
 	"net/http"
 
 	"github.com/buger/jsonparser"
-	"github.com/jensneuse/graphql-go-tools/pkg/asttransform"
+	"github.com/pvormste/graphql-go-tools/pkg/asttransform"
 	"github.com/tidwall/sjson"
 
-	"github.com/jensneuse/graphql-go-tools/pkg/ast"
-	"github.com/jensneuse/graphql-go-tools/pkg/astnormalization"
-	"github.com/jensneuse/graphql-go-tools/pkg/astparser"
-	"github.com/jensneuse/graphql-go-tools/pkg/astprinter"
-	"github.com/jensneuse/graphql-go-tools/pkg/engine/datasource/httpclient"
-	"github.com/jensneuse/graphql-go-tools/pkg/engine/plan"
-	"github.com/jensneuse/graphql-go-tools/pkg/engine/resolve"
-	"github.com/jensneuse/graphql-go-tools/pkg/federation"
-	"github.com/jensneuse/graphql-go-tools/pkg/lexer/literal"
-	"github.com/jensneuse/graphql-go-tools/pkg/operationreport"
+	"github.com/pvormste/graphql-go-tools/pkg/ast"
+	"github.com/pvormste/graphql-go-tools/pkg/astnormalization"
+	"github.com/pvormste/graphql-go-tools/pkg/astparser"
+	"github.com/pvormste/graphql-go-tools/pkg/astprinter"
+	"github.com/pvormste/graphql-go-tools/pkg/engine/datasource/httpclient"
+	"github.com/pvormste/graphql-go-tools/pkg/engine/plan"
+	"github.com/pvormste/graphql-go-tools/pkg/engine/resolve"
+	"github.com/pvormste/graphql-go-tools/pkg/federation"
+	"github.com/pvormste/graphql-go-tools/pkg/lexer/literal"
+	"github.com/pvormste/graphql-go-tools/pkg/operationreport"
 )
 
 type Planner struct {

@@ -7,11 +7,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jensneuse/graphql-go-tools/pkg/astparser"
-	"github.com/jensneuse/graphql-go-tools/pkg/astprinter"
-	graphqlDataSource "github.com/jensneuse/graphql-go-tools/pkg/engine/datasource/graphql_datasource"
-	"github.com/jensneuse/graphql-go-tools/pkg/engine/plan"
-	"github.com/jensneuse/graphql-go-tools/pkg/engine/resolve"
+	"github.com/pvormste/graphql-go-tools/pkg/astparser"
+	"github.com/pvormste/graphql-go-tools/pkg/astprinter"
+	graphqlDataSource "github.com/pvormste/graphql-go-tools/pkg/engine/datasource/graphql_datasource"
+	"github.com/pvormste/graphql-go-tools/pkg/engine/plan"
+	"github.com/pvormste/graphql-go-tools/pkg/engine/resolve"
 )
 
 func TestEngineConfigV2Factory_EngineV2Configuration(t *testing.T) {

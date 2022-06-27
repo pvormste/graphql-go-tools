@@ -5,8 +5,8 @@ package ast
 import (
 	"fmt"
 
-	"github.com/jensneuse/graphql-go-tools/internal/pkg/unsafebytes"
-	"github.com/jensneuse/graphql-go-tools/pkg/lexer/literal"
+	"github.com/pvormste/graphql-go-tools/internal/pkg/unsafebytes"
+	"github.com/pvormste/graphql-go-tools/pkg/lexer/literal"
 )
 
 type DirectiveLocation int

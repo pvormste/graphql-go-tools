@@ -4,9 +4,9 @@ package token
 import (
 	"fmt"
 
-	"github.com/jensneuse/graphql-go-tools/pkg/ast"
-	"github.com/jensneuse/graphql-go-tools/pkg/lexer/keyword"
-	"github.com/jensneuse/graphql-go-tools/pkg/lexer/position"
+	"github.com/pvormste/graphql-go-tools/pkg/ast"
+	"github.com/pvormste/graphql-go-tools/pkg/lexer/keyword"
+	"github.com/pvormste/graphql-go-tools/pkg/lexer/position"
 )
 
 type Token struct {

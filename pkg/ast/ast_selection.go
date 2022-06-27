@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/jensneuse/graphql-go-tools/internal/pkg/unsafebytes"
-	"github.com/jensneuse/graphql-go-tools/pkg/lexer/position"
+	"github.com/pvormste/graphql-go-tools/internal/pkg/unsafebytes"
+	"github.com/pvormste/graphql-go-tools/pkg/lexer/position"
 )
 
 type SelectionKind int

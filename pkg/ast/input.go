@@ -3,9 +3,9 @@ package ast
 import (
 	"bytes"
 
-	"github.com/jensneuse/graphql-go-tools/internal/pkg/unsafebytes"
-	"github.com/jensneuse/graphql-go-tools/pkg/lexer/literal"
-	"github.com/jensneuse/graphql-go-tools/pkg/lexer/position"
+	"github.com/pvormste/graphql-go-tools/internal/pkg/unsafebytes"
+	"github.com/pvormste/graphql-go-tools/pkg/lexer/literal"
+	"github.com/pvormste/graphql-go-tools/pkg/lexer/position"
 )
 
 // Input is a raw graphql document containing the raw input + meta data

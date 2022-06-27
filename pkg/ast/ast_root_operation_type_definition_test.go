@@ -3,9 +3,9 @@ package ast_test
 import (
 	"testing"
 
-	"github.com/jensneuse/graphql-go-tools/internal/pkg/unsafeparser"
-	"github.com/jensneuse/graphql-go-tools/pkg/ast"
-	"github.com/jensneuse/graphql-go-tools/pkg/astprinter"
+	"github.com/pvormste/graphql-go-tools/internal/pkg/unsafeparser"
+	"github.com/pvormste/graphql-go-tools/pkg/ast"
+	"github.com/pvormste/graphql-go-tools/pkg/astprinter"
 	"github.com/stretchr/testify/assert"
 )
 

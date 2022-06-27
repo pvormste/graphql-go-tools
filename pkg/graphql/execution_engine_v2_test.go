@@ -15,14 +15,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jensneuse/graphql-go-tools/pkg/engine/datasource/graphql_datasource"
-	"github.com/jensneuse/graphql-go-tools/pkg/engine/datasource/httpclient"
-	"github.com/jensneuse/graphql-go-tools/pkg/engine/datasource/rest_datasource"
-	"github.com/jensneuse/graphql-go-tools/pkg/engine/datasource/staticdatasource"
-	"github.com/jensneuse/graphql-go-tools/pkg/engine/plan"
-	"github.com/jensneuse/graphql-go-tools/pkg/engine/resolve"
-	"github.com/jensneuse/graphql-go-tools/pkg/operationreport"
-	"github.com/jensneuse/graphql-go-tools/pkg/starwars"
+	"github.com/pvormste/graphql-go-tools/pkg/engine/datasource/graphql_datasource"
+	"github.com/pvormste/graphql-go-tools/pkg/engine/datasource/httpclient"
+	"github.com/pvormste/graphql-go-tools/pkg/engine/datasource/rest_datasource"
+	"github.com/pvormste/graphql-go-tools/pkg/engine/datasource/staticdatasource"
+	"github.com/pvormste/graphql-go-tools/pkg/engine/plan"
+	"github.com/pvormste/graphql-go-tools/pkg/engine/resolve"
+	"github.com/pvormste/graphql-go-tools/pkg/operationreport"
+	"github.com/pvormste/graphql-go-tools/pkg/starwars"
 )
 
 func TestEngineResponseWriter_AsHTTPResponse(t *testing.T) {

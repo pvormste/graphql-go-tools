@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/jensneuse/graphql-go-tools/internal/pkg/unsafeparser"
-	"github.com/jensneuse/graphql-go-tools/pkg/asttransform"
-	"github.com/jensneuse/graphql-go-tools/pkg/operationreport"
+	"github.com/pvormste/graphql-go-tools/internal/pkg/unsafeparser"
+	"github.com/pvormste/graphql-go-tools/pkg/asttransform"
+	"github.com/pvormste/graphql-go-tools/pkg/operationreport"
 )
 
 func TestRealDepthCalculator_CalculateDepthForFragmentSpread(t *testing.T) {

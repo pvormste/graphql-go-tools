@@ -9,10 +9,10 @@ import (
 	"github.com/cespare/xxhash/v2"
 	byte_template "github.com/jensneuse/byte-template"
 
-	"github.com/jensneuse/graphql-go-tools/pkg/astnormalization"
-	"github.com/jensneuse/graphql-go-tools/pkg/astparser"
-	"github.com/jensneuse/graphql-go-tools/pkg/astvalidation"
-	"github.com/jensneuse/graphql-go-tools/pkg/execution/datasource"
+	"github.com/pvormste/graphql-go-tools/pkg/astnormalization"
+	"github.com/pvormste/graphql-go-tools/pkg/astparser"
+	"github.com/pvormste/graphql-go-tools/pkg/astvalidation"
+	"github.com/pvormste/graphql-go-tools/pkg/execution/datasource"
 )
 
 type Handler struct {

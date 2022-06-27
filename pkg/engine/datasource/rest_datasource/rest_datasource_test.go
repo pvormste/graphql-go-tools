@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jensneuse/graphql-go-tools/pkg/ast"
-	"github.com/jensneuse/graphql-go-tools/pkg/engine/datasourcetesting"
-	"github.com/jensneuse/graphql-go-tools/pkg/engine/plan"
-	"github.com/jensneuse/graphql-go-tools/pkg/engine/resolve"
+	"github.com/pvormste/graphql-go-tools/pkg/ast"
+	"github.com/pvormste/graphql-go-tools/pkg/engine/datasourcetesting"
+	"github.com/pvormste/graphql-go-tools/pkg/engine/plan"
+	"github.com/pvormste/graphql-go-tools/pkg/engine/resolve"
 )
 
 const (

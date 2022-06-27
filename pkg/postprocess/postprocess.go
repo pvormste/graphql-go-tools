@@ -1,7 +1,7 @@
 package postprocess
 
 import (
-	"github.com/jensneuse/graphql-go-tools/pkg/engine/plan"
+	"github.com/pvormste/graphql-go-tools/pkg/engine/plan"
 )
 
 type PostProcessor interface {

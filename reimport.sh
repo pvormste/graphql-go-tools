@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-TYK_REPLACE_PATH="github.com\/TykTechnologies\/graphql\-go\-tools"
+TYK_REPLACE_PATH="github.com\/pvormste\/graphql\-go\-tools"
 JENSNEUSE_REPLACE_PATH="github.com\/jensneuse\/graphql\-go\-tools"
 WG_REPLACE_PATH="github.com\/wundergraph\/graphql\-go\-tools"
 

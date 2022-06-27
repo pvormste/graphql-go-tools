@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"io"
 
-	"github.com/jensneuse/graphql-go-tools/pkg/lexer/literal"
-	"github.com/jensneuse/graphql-go-tools/pkg/lexer/position"
+	"github.com/pvormste/graphql-go-tools/pkg/lexer/literal"
+	"github.com/pvormste/graphql-go-tools/pkg/lexer/position"
 )
 
 type DirectiveList struct {

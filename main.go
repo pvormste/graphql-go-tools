@@ -1,6 +1,6 @@
 package main
 
-import "github.com/jensneuse/graphql-go-tools/cmd"
+import "github.com/pvormste/graphql-go-tools/cmd"
 
 func main() {
 	cmd.Execute()

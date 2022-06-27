@@ -4,9 +4,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/jensneuse/graphql-go-tools/internal/pkg/unsafeprinter"
-	"github.com/jensneuse/graphql-go-tools/pkg/operationreport"
-	"github.com/jensneuse/graphql-go-tools/pkg/starwars"
+	"github.com/pvormste/graphql-go-tools/internal/pkg/unsafeprinter"
+	"github.com/pvormste/graphql-go-tools/pkg/operationreport"
+	"github.com/pvormste/graphql-go-tools/pkg/starwars"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

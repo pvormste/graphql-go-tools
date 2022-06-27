@@ -5,10 +5,10 @@ import (
 
 	"github.com/tidwall/sjson"
 
-	"github.com/jensneuse/graphql-go-tools/internal/pkg/unsafebytes"
-	"github.com/jensneuse/graphql-go-tools/pkg/ast"
-	"github.com/jensneuse/graphql-go-tools/pkg/astimport"
-	"github.com/jensneuse/graphql-go-tools/pkg/astvisitor"
+	"github.com/pvormste/graphql-go-tools/internal/pkg/unsafebytes"
+	"github.com/pvormste/graphql-go-tools/pkg/ast"
+	"github.com/pvormste/graphql-go-tools/pkg/astimport"
+	"github.com/pvormste/graphql-go-tools/pkg/astvisitor"
 )
 
 func extractVariables(walker *astvisitor.Walker) *variablesExtractionVisitor {

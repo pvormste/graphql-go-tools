@@ -18,11 +18,11 @@ import (
 	"github.com/sebdah/goldie"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/jensneuse/graphql-go-tools/pkg/ast"
-	"github.com/jensneuse/graphql-go-tools/pkg/execution/datasource"
-	"github.com/jensneuse/graphql-go-tools/pkg/introspection"
-	"github.com/jensneuse/graphql-go-tools/pkg/lexer/literal"
-	"github.com/jensneuse/graphql-go-tools/pkg/operationreport"
+	"github.com/pvormste/graphql-go-tools/pkg/ast"
+	"github.com/pvormste/graphql-go-tools/pkg/execution/datasource"
+	"github.com/pvormste/graphql-go-tools/pkg/introspection"
+	"github.com/pvormste/graphql-go-tools/pkg/lexer/literal"
+	"github.com/pvormste/graphql-go-tools/pkg/operationreport"
 )
 
 // nolint
