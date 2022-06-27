@@ -1,5 +1,4 @@
 type Review {
-    attachment: Attachment
     body: String!
     author: User!
     product: Product!

@@ -8,7 +8,7 @@ require (
 	github.com/gorilla/websocket v1.5.0
 	github.com/jensneuse/abstractlogger v0.0.4
 	github.com/nats-io/nats-server/v2 v2.3.2 // indirect
-	github.com/pvormste/graphql-go-tools v1.20.2
+	github.com/pvormste/graphql-go-tools v1.6.2-0.20220627101903-ba97d05b8fdb
 	github.com/vektah/gqlparser/v2 v2.4.5
 	go.uber.org/atomic v1.9.0
 	go.uber.org/zap v1.18.1
